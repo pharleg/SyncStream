@@ -10,7 +10,10 @@ import type {
   WixVariant,
   FieldMappings,
 } from '../types/wix.types';
-import type { GmcProduct } from '../types/gmc.types';
+import type {
+  GmcProductInput,
+  GmcProductAttributes,
+} from '../types/gmc.types';
 import type { MetaProduct } from '../types/meta.types';
 
 /** Strip HTML tags and collapse whitespace. */
@@ -32,37 +35,56 @@ function truncate(str: string, maxLen: number): string {
   return str.length > maxLen ? str.slice(0, maxLen) : str;
 }
 
+/** Convert a decimal price string or number to amountMicros string. */
+function toAmountMicros(amount: string | number): string {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  if (isNaN(num)) return '0';
+  return String(Math.round(num * 1_000_000));
+}
+
 /**
  * Extract price from a Wix product using the fallback chain.
- * Returns { value: "14.99", currency: "USD" }.
+ * Returns { amountMicros: "14990000", currencyCode: "USD" }.
  */
 function extractPrice(
   product: WixProduct,
   variant?: WixVariant,
-): { value: string; currency: string } {
-  const currency = product.currency ?? 'USD';
+): { amountMicros: string; currencyCode: string } {
+  const currencyCode = product.currency ?? 'USD';
 
   // Variant-level price override
   if (variant?.price?.actualPrice?.amount) {
-    return { value: variant.price.actualPrice.amount, currency };
+    return {
+      amountMicros: toAmountMicros(variant.price.actualPrice.amount),
+      currencyCode,
+    };
   }
 
   // Fallback 1: actualPriceRange.minValue.amount
   if (product.actualPriceRange?.minValue?.amount) {
-    return { value: product.actualPriceRange.minValue.amount, currency };
+    return {
+      amountMicros: toAmountMicros(product.actualPriceRange.minValue.amount),
+      currencyCode,
+    };
   }
 
   // Fallback 2: priceData.price
   if (product.priceData?.price != null) {
-    return { value: String(product.priceData.price), currency };
+    return {
+      amountMicros: toAmountMicros(product.priceData.price),
+      currencyCode,
+    };
   }
 
   // Fallback 3: price.price
   if (product.price?.price != null) {
-    return { value: String(product.price.price), currency };
+    return {
+      amountMicros: toAmountMicros(product.price.price),
+      currencyCode,
+    };
   }
 
-  return { value: '0.00', currency };
+  return { amountMicros: '0', currencyCode };
 }
 
 /** Resolve a mapped field value from product data. */
@@ -145,24 +167,25 @@ function buildProductLink(product: WixProduct, siteUrl: string): string {
 }
 
 /**
- * Map a Wix product to one or more GMC products.
- * Multi-variant products expand to one GMC row per variant.
+ * Map a Wix product to one or more GMC ProductInput objects (Merchant API v1).
+ * Multi-variant products expand to one row per variant.
  */
 export function mapToGmc(
   product: WixProduct,
   mappings: FieldMappings,
   siteUrl: string,
-): GmcProduct[] {
+): GmcProductInput[] {
   const rawDesc = product.plainDescription ?? product.description ?? '';
   const description = truncate(stripHtml(rawDesc), 5000) || product.name;
   const brand =
     product.brand?.name ??
     resolveMappedField(product, 'brand', mappings) ??
     '';
-  const condition =
-    (resolveMappedField(product, 'condition', mappings) as
-      | GmcProduct['condition']
-      | undefined) ?? 'new';
+  const condition = (
+    resolveMappedField(product, 'condition', mappings)?.toUpperCase() as
+      | GmcProductAttributes['condition']
+      | undefined
+  ) ?? 'NEW';
   const gtin = resolveMappedField(product, 'gtin', mappings);
   const mpn = resolveMappedField(product, 'mpn', mappings);
   const googleProductCategory = resolveMappedField(
@@ -173,19 +196,17 @@ export function mapToGmc(
   const additionalImageLinks = getAdditionalImageLinks(product);
 
   const variants = product.variantsInfo?.variants ?? [];
-  const isMultiVariant = variants.length > 1;
 
   // Single product (no variants or single variant)
   if (variants.length <= 1) {
     const variant = variants[0];
     const price = extractPrice(product, variant);
-    const availability: GmcProduct['availability'] =
+    const availability: GmcProductAttributes['availability'] =
       product.inventory?.availabilityStatus === 'OUT_OF_STOCK'
-        ? 'out_of_stock'
-        : 'in_stock';
+        ? 'OUT_OF_STOCK'
+        : 'IN_STOCK';
 
-    const gmcProduct: GmcProduct = {
-      offerId: variant?.id ?? product.id,
+    const productAttributes: GmcProductAttributes = {
       title: product.name,
       description,
       link: buildProductLink(product, siteUrl),
@@ -194,55 +215,60 @@ export function mapToGmc(
       price,
       brand,
       condition,
-      contentLanguage: 'en',
-      targetCountry: 'US',
-      channel: 'online',
     };
 
-    if (gtin) gmcProduct.gtin = gtin;
-    if (mpn) gmcProduct.mpn = mpn;
-    if (!gtin && !mpn) gmcProduct.identifierExists = false;
+    if (gtin) productAttributes.gtins = [gtin];
+    if (mpn) productAttributes.mpn = mpn;
+    if (!gtin && !mpn) productAttributes.identifierExists = false;
     if (googleProductCategory)
-      gmcProduct.googleProductCategory = googleProductCategory;
+      productAttributes.googleProductCategory = googleProductCategory;
     if (additionalImageLinks.length > 0)
-      gmcProduct.additionalImageLinks = additionalImageLinks;
+      productAttributes.additionalImageLinks = additionalImageLinks;
 
-    return [gmcProduct];
+    return [
+      {
+        offerId: variant?.id ?? product.id,
+        contentLanguage: 'en',
+        feedLabel: 'US',
+        productAttributes,
+      },
+    ];
   }
 
-  // Multi-variant: one GMC row per variant
+  // Multi-variant: one GMC ProductInput per variant
   return variants.map((variant) => {
     const price = extractPrice(product, variant);
     const { color, size } = extractChoiceValues(variant);
     const inStock = variant.inventoryStatus?.inStock !== false;
 
-    const gmcProduct: GmcProduct = {
-      offerId: variant.id,
+    const productAttributes: GmcProductAttributes = {
       title: product.name,
       description,
       link: buildProductLink(product, siteUrl),
       imageLink: getImageLink(product, variant),
-      availability: inStock ? 'in_stock' : 'out_of_stock',
+      availability: inStock ? 'IN_STOCK' : 'OUT_OF_STOCK',
       price,
       brand,
       condition,
-      contentLanguage: 'en',
-      targetCountry: 'US',
-      channel: 'online',
       itemGroupId: product.id,
     };
 
-    if (color) gmcProduct.color = color;
-    if (size) gmcProduct.sizes = [size];
-    if (gtin) gmcProduct.gtin = gtin;
-    if (mpn) gmcProduct.mpn = mpn;
-    if (!gtin && !mpn) gmcProduct.identifierExists = false;
+    if (color) productAttributes.color = color;
+    if (size) productAttributes.size = size;
+    if (gtin) productAttributes.gtins = [gtin];
+    if (mpn) productAttributes.mpn = mpn;
+    if (!gtin && !mpn) productAttributes.identifierExists = false;
     if (googleProductCategory)
-      gmcProduct.googleProductCategory = googleProductCategory;
+      productAttributes.googleProductCategory = googleProductCategory;
     if (additionalImageLinks.length > 0)
-      gmcProduct.additionalImageLinks = additionalImageLinks;
+      productAttributes.additionalImageLinks = additionalImageLinks;
 
-    return gmcProduct;
+    return {
+      offerId: variant.id,
+      contentLanguage: 'en',
+      feedLabel: 'US',
+      productAttributes,
+    };
   });
 }
 
