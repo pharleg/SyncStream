@@ -3,16 +3,7 @@
  * Returns sync state summary and records for the Status dashboard.
  */
 import type { APIContext } from 'astro';
-import { items } from '@wix/data';
-import { getAppConfig } from '../dataService';
-
-interface SyncRecord {
-  productId: string;
-  platform: string;
-  status: string;
-  lastSynced: string;
-  errorCount: number;
-}
+import { getAppConfig, querySyncStates } from '../dataService';
 
 export async function GET(context: APIContext) {
   try {
@@ -20,22 +11,14 @@ export async function GET(context: APIContext) {
       context.url.searchParams.get('instanceId') ?? '';
 
     const config = await getAppConfig(instanceId);
+    const states = await querySyncStates(200);
 
-    // Query all SyncState records, most recent first
-    const result = await items
-      .query('SyncState')
-      .descending('lastSynced')
-      .limit(200)
-      .find();
-
-    const records: SyncRecord[] = (result.items ?? []).map((item) => ({
-      productId: item.productId as string,
-      platform: item.platform as string,
-      status: item.status as string,
-      lastSynced: item.lastSynced as string,
-      errorCount: item.errorLog
-        ? JSON.parse(item.errorLog as string).length
-        : 0,
+    const records = states.map((s) => ({
+      productId: s.productId,
+      platform: s.platform,
+      status: s.status,
+      lastSynced: s.lastSynced.toISOString(),
+      errorCount: Array.isArray(s.errorLog) ? s.errorLog.length : 0,
     }));
 
     const totalSynced = records.filter((r) => r.status === 'synced').length;

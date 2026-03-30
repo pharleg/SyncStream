@@ -1,135 +1,160 @@
 /**
  * dataService.ts
  *
- * CRUD helpers for AppConfig and SyncState Wix Data collections.
- * All Wix Data access is centralized here.
- *
- * Wix Data SDK API:
- *   items.query(collectionId) → WixDataQuery builder (.eq(), .limit(), .find())
- *   items.insert(collectionId, item) → Promise<Item>
- *   items.update(collectionId, item) → Promise<Item>  (requires _id)
- *   items.save(collectionId, item) → Promise<Item>    (upsert: insert or update)
+ * CRUD helpers for AppConfig and SyncState.
+ * Uses Supabase (Postgres) instead of Wix Data collections.
+ * Credentials stored in Wix Secrets Manager:
+ *   - supabase_project_url
+ *   - supabase_service_role
  */
 
-import { items } from '@wix/data';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { secrets } from '@wix/secrets';
 import type { AppConfig, SyncState } from '../types/wix.types';
 
-const COLLECTION_APP_CONFIG = 'AppConfig';
-const COLLECTION_SYNC_STATE = 'SyncState';
+let _client: SupabaseClient | null = null;
+
+async function getClient(): Promise<SupabaseClient> {
+  if (_client) return _client;
+  const url = (await secrets.getSecretValue('supabase_project_url')).value!;
+  const key = (await secrets.getSecretValue('supabase_service_role')).value!;
+  _client = createClient(url, key);
+  return _client;
+}
 
 export async function getAppConfig(
   instanceId: string,
 ): Promise<AppConfig | null> {
-  const result = await items
-    .query(COLLECTION_APP_CONFIG)
-    .eq('instanceId', instanceId)
+  const db = await getClient();
+  const { data, error } = await db
+    .from('app_config')
+    .select('*')
+    .eq('instance_id', instanceId)
     .limit(1)
-    .find();
+    .single();
 
-  const item = result.items?.[0];
-  if (!item) return null;
+  if (error || !data) return null;
 
   return {
-    instanceId: item.instanceId as string,
-    gmcConnected: (item.gmcConnected as boolean) ?? false,
-    metaConnected: (item.metaConnected as boolean) ?? false,
-    fieldMappings: item.fieldMappings
-      ? JSON.parse(item.fieldMappings as string)
-      : {},
-    syncEnabled: (item.syncEnabled as boolean) ?? false,
-    lastFullSync: item.lastFullSync
-      ? new Date(item.lastFullSync as string)
-      : null,
+    instanceId: data.instance_id,
+    gmcConnected: data.gmc_connected ?? false,
+    metaConnected: data.meta_connected ?? false,
+    fieldMappings: data.field_mappings ?? {},
+    syncEnabled: data.sync_enabled ?? false,
+    lastFullSync: data.last_full_sync ? new Date(data.last_full_sync) : null,
+    gmcDataSourceId: data.gmc_data_source_id ?? undefined,
   };
 }
 
 export async function saveAppConfig(
   config: AppConfig,
 ): Promise<void> {
-  const existing = await items
-    .query(COLLECTION_APP_CONFIG)
-    .eq('instanceId', config.instanceId)
-    .limit(1)
-    .find();
+  const db = await getClient();
+  const { error } = await db
+    .from('app_config')
+    .upsert(
+      {
+        instance_id: config.instanceId,
+        gmc_connected: config.gmcConnected,
+        meta_connected: config.metaConnected,
+        field_mappings: config.fieldMappings,
+        sync_enabled: config.syncEnabled,
+        last_full_sync: config.lastFullSync?.toISOString() ?? null,
+        gmc_data_source_id: config.gmcDataSourceId ?? null,
+      },
+      { onConflict: 'instance_id' },
+    );
 
-  const data = {
-    instanceId: config.instanceId,
-    gmcConnected: config.gmcConnected,
-    metaConnected: config.metaConnected,
-    fieldMappings: JSON.stringify(config.fieldMappings),
-    syncEnabled: config.syncEnabled,
-    lastFullSync: config.lastFullSync?.toISOString() ?? null,
-  };
-
-  if (existing.items?.[0]) {
-    await items.update(COLLECTION_APP_CONFIG, {
-      ...data,
-      _id: existing.items[0]._id,
-    });
-  } else {
-    await items.insert(COLLECTION_APP_CONFIG, data);
-  }
+  if (error) throw new Error(`Failed to save AppConfig: ${error.message}`);
 }
 
 export async function getSyncState(
   productId: string,
   platform: 'gmc' | 'meta',
 ): Promise<SyncState | null> {
-  const result = await items
-    .query(COLLECTION_SYNC_STATE)
-    .eq('productId', productId)
+  const db = await getClient();
+  const { data, error } = await db
+    .from('sync_state')
+    .select('*')
+    .eq('product_id', productId)
     .eq('platform', platform)
     .limit(1)
-    .find();
+    .single();
 
-  const item = result.items?.[0];
-  if (!item) return null;
+  if (error || !data) return null;
 
   return {
-    productId: item.productId as string,
-    platform: item.platform as 'gmc' | 'meta',
-    status: item.status as SyncState['status'],
-    lastSynced: new Date(item.lastSynced as string),
-    errorLog: item.errorLog ? JSON.parse(item.errorLog as string) : null,
-    externalId: (item.externalId as string) ?? '',
+    productId: data.product_id,
+    platform: data.platform,
+    status: data.status,
+    lastSynced: new Date(data.last_synced),
+    errorLog: data.error_log ?? null,
+    externalId: data.external_id ?? '',
   };
 }
 
 export async function upsertSyncState(
   state: SyncState,
 ): Promise<void> {
-  const existing = await items
-    .query(COLLECTION_SYNC_STATE)
-    .eq('productId', state.productId)
-    .eq('platform', state.platform)
-    .limit(1)
-    .find();
+  const db = await getClient();
+  const { error } = await db
+    .from('sync_state')
+    .upsert(
+      {
+        product_id: state.productId,
+        platform: state.platform,
+        status: state.status,
+        last_synced: state.lastSynced.toISOString(),
+        error_log: state.errorLog,
+        external_id: state.externalId,
+      },
+      { onConflict: 'product_id,platform' },
+    );
 
-  const data = {
-    productId: state.productId,
-    platform: state.platform,
-    status: state.status,
-    lastSynced: state.lastSynced.toISOString(),
-    errorLog: state.errorLog ? JSON.stringify(state.errorLog) : null,
-    externalId: state.externalId,
-  };
-
-  if (existing.items?.[0]) {
-    await items.update(COLLECTION_SYNC_STATE, {
-      ...data,
-      _id: existing.items[0]._id,
-    });
-  } else {
-    await items.insert(COLLECTION_SYNC_STATE, data);
-  }
+  if (error) throw new Error(`Failed to upsert SyncState: ${error.message}`);
 }
 
 export async function bulkUpsertSyncStates(
   states: SyncState[],
 ): Promise<void> {
-  const CHUNK_SIZE = 50;
-  for (let i = 0; i < states.length; i += CHUNK_SIZE) {
-    const chunk = states.slice(i, i + CHUNK_SIZE);
-    await Promise.all(chunk.map((s) => upsertSyncState(s)));
-  }
+  if (states.length === 0) return;
+  const db = await getClient();
+  const { error } = await db
+    .from('sync_state')
+    .upsert(
+      states.map((s) => ({
+        product_id: s.productId,
+        platform: s.platform,
+        status: s.status,
+        last_synced: s.lastSynced.toISOString(),
+        error_log: s.errorLog,
+        external_id: s.externalId,
+      })),
+      { onConflict: 'product_id,platform' },
+    );
+
+  if (error) throw new Error(`Failed to bulk upsert SyncState: ${error.message}`);
+}
+
+/** Query sync states for the Status dashboard. */
+export async function querySyncStates(
+  limit: number = 200,
+): Promise<SyncState[]> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('sync_state')
+    .select('*')
+    .order('last_synced', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(`Failed to query SyncState: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    productId: row.product_id,
+    platform: row.platform,
+    status: row.status,
+    lastSynced: new Date(row.last_synced),
+    errorLog: row.error_log ?? null,
+    externalId: row.external_id ?? '',
+  }));
 }
