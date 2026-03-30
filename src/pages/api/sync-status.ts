@@ -2,13 +2,13 @@
  * GET /api/sync-status
  * Returns sync state summary and records for the Status dashboard.
  */
-import type { APIContext } from 'astro';
+import type { APIRoute } from 'astro';
 import { getAppConfig, querySyncStates } from '../../backend/dataService';
 
-export async function GET(context: APIContext) {
+export const GET: APIRoute = async ({ request }) => {
   try {
-    const instanceId =
-      context.url.searchParams.get('instanceId') ?? '';
+    const url = new URL(request.url);
+    const instanceId = url.searchParams.get('instanceId') ?? '';
 
     const config = await getAppConfig(instanceId);
     const states = await querySyncStates(200);
@@ -43,4 +43,4 @@ export async function GET(context: APIContext) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};

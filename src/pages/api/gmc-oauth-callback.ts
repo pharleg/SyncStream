@@ -3,14 +3,15 @@
  * Google redirects here after OAuth consent.
  * Exchanges code for tokens and stores them.
  */
-import type { APIContext } from 'astro';
+import type { APIRoute } from 'astro';
 import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens } from '../../backend/oauthService';
 import { registerGcpProject, createDataSource } from '../../backend/gmcClient';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 
-export async function GET(context: APIContext) {
-  const code = context.url.searchParams.get('code');
-  const instanceId = context.url.searchParams.get('state') ?? '';
+export const GET: APIRoute = async ({ request, redirect }) => {
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const instanceId = url.searchParams.get('state') ?? '';
 
   if (!code) {
     return new Response('Missing authorization code', { status: 400 });
@@ -43,11 +44,10 @@ export async function GET(context: APIContext) {
     }
     await saveAppConfig(config);
 
-    // Redirect back to connect page with success
-    return context.redirect('/dashboard/connect?gmc=connected');
+    return redirect('/dashboard/connect?gmc=connected');
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unknown error';
     return new Response(`OAuth failed: ${message}`, { status: 500 });
   }
-}
+};

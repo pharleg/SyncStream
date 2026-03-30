@@ -1,14 +1,15 @@
 /**
- * GET /api/app-config
- * Returns the current AppConfig for the instance.
+ * GET /api/app-config — Returns the current AppConfig.
+ * POST /api/app-config — Saves/updates AppConfig fields.
  */
-import type { APIContext } from 'astro';
+import type { APIRoute } from 'astro';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
+import type { FieldMappings } from '../../types/wix.types';
 
-export async function GET(context: APIContext) {
+export const GET: APIRoute = async ({ request }) => {
   try {
-    const instanceId =
-      context.url.searchParams.get('instanceId') ?? '';
+    const url = new URL(request.url);
+    const instanceId = url.searchParams.get('instanceId') ?? '';
     const config = await getAppConfig(instanceId);
 
     return new Response(JSON.stringify(config), {
@@ -22,11 +23,11 @@ export async function GET(context: APIContext) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};
 
-export async function POST(context: APIContext) {
+export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await context.request.json() as {
+    const body = await request.json() as {
       instanceId: string;
       fieldMappings?: Record<string, { type: string; wixField?: string; defaultValue?: string }>;
       syncEnabled?: boolean;
@@ -34,7 +35,6 @@ export async function POST(context: APIContext) {
 
     const instanceId = body.instanceId || 'default';
 
-    // Get existing config or create new
     let config = await getAppConfig(instanceId);
     if (!config) {
       config = {
@@ -47,9 +47,8 @@ export async function POST(context: APIContext) {
       };
     }
 
-    // Apply updates
     if (body.fieldMappings !== undefined) {
-      config.fieldMappings = body.fieldMappings as import('../../types/wix.types').FieldMappings;
+      config.fieldMappings = body.fieldMappings as FieldMappings;
     }
     if (body.syncEnabled !== undefined) {
       config.syncEnabled = body.syncEnabled;
@@ -68,4 +67,4 @@ export async function POST(context: APIContext) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};

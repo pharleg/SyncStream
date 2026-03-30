@@ -18,6 +18,16 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
+import { httpClient } from '@wix/essentials';
+
+// Derive the app's base URL for API calls
+const BASE_URL = typeof import.meta.url !== 'undefined'
+  ? new URL(import.meta.url).origin
+  : '';
+
+function appFetch(path: string, init?: RequestInit): Promise<Response> {
+  return httpClient.fetchWithAuth(`${BASE_URL}${path}`, init);
+}
 
 // ─── Shared types & API helpers ──────────────────────────────────────────
 
@@ -54,13 +64,13 @@ interface SyncSummary {
 }
 
 async function fetchAppConfig(): Promise<AppConfigData | null> {
-  const response = await fetch('/api/app-config?instanceId=default');
+  const response = await appFetch('/api/app-config?instanceId=default');
   if (!response.ok) return null;
   return response.json();
 }
 
 async function saveAppConfig(updates: Record<string, unknown>): Promise<void> {
-  const response = await fetch('/api/app-config', {
+  const response = await appFetch('/api/app-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instanceId: 'default', ...updates }),
@@ -72,13 +82,13 @@ async function saveAppConfig(updates: Record<string, unknown>): Promise<void> {
 }
 
 async function fetchSyncStatus(): Promise<SyncSummary> {
-  const response = await fetch('/api/sync-status?instanceId=default');
+  const response = await appFetch('/api/sync-status?instanceId=default');
   if (!response.ok) throw new Error('Failed to fetch sync status');
   return response.json();
 }
 
 async function triggerSync(): Promise<{ total: number; synced: number; failed: number }> {
-  const response = await fetch('/api/sync-trigger', {
+  const response = await appFetch('/api/sync-trigger', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instanceId: 'default', platforms: ['gmc'] }),
@@ -88,7 +98,7 @@ async function triggerSync(): Promise<{ total: number; synced: number; failed: n
 }
 
 async function callInitiateGmcOAuth(): Promise<string> {
-  const response = await fetch('/api/gmc-oauth-init?instanceId=default');
+  const response = await appFetch('/api/gmc-oauth-init?instanceId=default');
   const data = await response.json();
   if (!response.ok) throw new Error(data.error);
   return data.authUrl;

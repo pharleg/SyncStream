@@ -2,13 +2,13 @@
  * POST /api/sync-trigger
  * Triggers a full sync for the given instance.
  */
-import type { APIContext } from 'astro';
+import type { APIRoute } from 'astro';
 import { runFullSync } from '../../backend/syncService';
 import type { Platform } from '../../types/sync.types';
 
-export async function POST(context: APIContext) {
+export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = (await context.request.json()) as {
+    const body = (await request.json()) as {
       instanceId: string;
       platforms?: Platform[];
     };
@@ -28,4 +28,4 @@ export async function POST(context: APIContext) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};

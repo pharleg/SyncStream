@@ -2,12 +2,13 @@
  * GET /api/gmc-oauth-init
  * Returns the GMC OAuth authorization URL.
  */
-import type { APIContext } from 'astro';
+import type { APIRoute } from 'astro';
 import { initiateGmcOAuth } from '../../backend/oauthService';
 
-export async function GET(context: APIContext) {
+export const GET: APIRoute = async ({ request }) => {
   try {
-    const instanceId = context.url.searchParams.get('instanceId') ?? '';
+    const url = new URL(request.url);
+    const instanceId = url.searchParams.get('instanceId') ?? '';
     const authUrl = await initiateGmcOAuth(instanceId);
     return new Response(JSON.stringify({ authUrl }), {
       headers: { 'Content-Type': 'application/json' },
@@ -20,4 +21,4 @@ export async function GET(context: APIContext) {
       headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};
