@@ -101,38 +101,32 @@ export async function batchInsertProducts(
   products: GmcProductInput[],
   accessToken: string,
 ): Promise<GmcInsertResult[]> {
-  const CONCURRENCY = 10;
   const results: GmcInsertResult[] = [];
 
-  for (let i = 0; i < products.length; i += CONCURRENCY) {
-    const chunk = products.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(
-      chunk.map(async (product): Promise<GmcInsertResult> => {
-        try {
-          const response = await insertProduct(
-            merchantId,
-            dataSourceId,
-            product,
-            accessToken,
-          );
-          return {
-            offerId: product.offerId,
-            success: true,
-            name: response.name,
-          };
-        } catch (error) {
-          return {
-            offerId: product.offerId,
-            success: false,
-            error:
-              error instanceof Error
-                ? error.message
-                : 'Unknown error',
-          };
-        }
-      }),
-    );
-    results.push(...chunkResults);
+  // Sequential inserts to stay within Cloudflare Workers subrequest limits
+  for (const product of products) {
+    try {
+      const response = await insertProduct(
+        merchantId,
+        dataSourceId,
+        product,
+        accessToken,
+      );
+      results.push({
+        offerId: product.offerId,
+        success: true,
+        name: response.name,
+      });
+    } catch (error) {
+      results.push({
+        offerId: product.offerId,
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Unknown error',
+      });
+    }
   }
 
   return results;

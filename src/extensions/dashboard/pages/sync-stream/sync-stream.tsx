@@ -262,7 +262,7 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
     (key: string, update: Partial<FieldMapping>) => {
       setMappings((prev) => ({
         ...prev,
-        [key]: { ...prev[key], ...update } as FieldMapping,
+        [key]: { type: 'default', ...prev[key], ...update } as FieldMapping,
       }));
       setSuccess(false);
     },
@@ -636,6 +636,11 @@ const SyncStreamPage: FC = () => {
 
   useEffect(() => {
     loadConfig();
+    // Debug: log mapped product + config
+    appFetch('/api/debug-sync')
+      .then((r) => r.json())
+      .then((data) => console.log('[SyncStream] DEBUG sync:', JSON.stringify(data, null, 2)))
+      .catch((e) => console.error('[SyncStream] DEBUG error:', e));
   }, [loadConfig]);
 
   if (loading) {

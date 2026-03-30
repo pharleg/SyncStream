@@ -39,7 +39,9 @@ export async function getAppConfig(
     instanceId: data.instance_id,
     gmcConnected: data.gmc_connected ?? false,
     metaConnected: data.meta_connected ?? false,
-    fieldMappings: data.field_mappings ?? {},
+    fieldMappings: typeof data.field_mappings === 'string'
+      ? JSON.parse(data.field_mappings)
+      : data.field_mappings ?? {},
     syncEnabled: data.sync_enabled ?? false,
     lastFullSync: data.last_full_sync ? new Date(data.last_full_sync) : null,
     gmcDataSourceId: data.gmc_data_source_id ?? undefined,

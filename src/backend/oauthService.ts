@@ -25,21 +25,34 @@ async function upsertSecret(name: string, value: string): Promise<void> {
   }
 }
 
-/** Get a secret value by name. */
+/** In-memory cache for secrets within a single request. */
+const _secretCache = new Map<string, string>();
+
+/** Get a secret value by name, with in-request caching. */
 async function getSecret(name: string): Promise<string> {
+  const cached = _secretCache.get(name);
+  if (cached !== undefined) return cached;
   const result = await secrets.getSecretValue(name);
-  return result.value ?? '';
+  const value = result.value ?? '';
+  _secretCache.set(name, value);
+  return value;
 }
+
+let _credentialsCache: { clientId: string; clientSecret: string; redirectUri: string } | null = null;
 
 async function getGmcClientCredentials(): Promise<{
   clientId: string;
   clientSecret: string;
   redirectUri: string;
 }> {
-  const clientId = await getSecret('gmc_client_id');
-  const clientSecret = await getSecret('gmc_client_secret');
-  const redirectUri = await getSecret('gmc_redirect_uri');
-  return { clientId, clientSecret, redirectUri };
+  if (_credentialsCache) return _credentialsCache;
+  const [clientId, clientSecret, redirectUri] = await Promise.all([
+    getSecret('gmc_client_id'),
+    getSecret('gmc_client_secret'),
+    getSecret('gmc_redirect_uri'),
+  ]);
+  _credentialsCache = { clientId, clientSecret, redirectUri };
+  return _credentialsCache;
 }
 
 export async function initiateGmcOAuth(

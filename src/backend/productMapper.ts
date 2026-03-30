@@ -96,10 +96,6 @@ function resolveMappedField(
   const mapping = mappings[fieldName];
   if (!mapping) return undefined;
 
-  if (mapping.type === 'default') {
-    return mapping.defaultValue;
-  }
-
   if (mapping.type === 'customField' && mapping.wixField) {
     // Try extendedFields first, then legacy customFields
     const extVal =
@@ -107,11 +103,31 @@ function resolveMappedField(
         mapping.wixField
       ];
     if (typeof extVal === 'string') return extVal;
-
     return product.customFields?.[mapping.wixField];
   }
 
+  // Default: return defaultValue (handles both type === 'default' and missing type)
+  if (mapping.defaultValue) {
+    return mapping.defaultValue;
+  }
+
   return undefined;
+}
+
+/**
+ * Convert a Wix media URL to an HTTPS URL.
+ * Wix format: "wix:image://v1/{filename}/{displayName}#originWidth=...&originHeight=..."
+ * Output: "https://static.wixstatic.com/media/{filename}"
+ */
+function wixImageToUrl(wixImage: string | undefined): string {
+  if (!wixImage) return '';
+  if (wixImage.startsWith('http')) return wixImage;
+  // Extract filename from wix:image://v1/{filename}/...
+  const match = wixImage.match(/wix:image:\/\/v1\/([^/]+)/);
+  if (match) {
+    return `https://static.wixstatic.com/media/${match[1]}`;
+  }
+  return '';
 }
 
 /** Get the main image URL from a product or variant. */
@@ -119,20 +135,21 @@ function getImageLink(
   product: WixProduct,
   variant?: WixVariant,
 ): string {
-  return (
-    variant?.media?.mainMedia?.image?.url ??
-    product.media?.main?.image?.url ??
-    ''
-  );
+  // V3 SDK: media.main.image is a wix:image:// string, not an object
+  const variantImage = (variant?.media as any)?.image ?? variant?.media?.mainMedia?.image?.url;
+  const mainImage = (product.media?.main as any)?.image ?? product.media?.main?.image?.url;
+  const firstGalleryImage = (product.media?.itemsInfo?.items?.[0] as any)?.image;
+
+  return wixImageToUrl(variantImage) || wixImageToUrl(mainImage) || wixImageToUrl(firstGalleryImage) || '';
 }
 
 /** Get additional image URLs (up to 10, excluding main). */
 function getAdditionalImageLinks(product: WixProduct): string[] {
-  const mainUrl = product.media?.main?.image?.url;
+  const mainImage = (product.media?.main as any)?.image;
   const items = product.media?.itemsInfo?.items ?? [];
   return items
-    .filter((item) => item.image?.url && item.image.url !== mainUrl)
-    .map((item) => item.image!.url)
+    .map((item) => wixImageToUrl((item as any)?.image ?? item.image?.url))
+    .filter((url) => url && url !== wixImageToUrl(mainImage))
     .slice(0, 10);
 }
 
@@ -161,9 +178,15 @@ function extractChoiceValues(variant: WixVariant): {
 
 /** Build the product page URL. */
 function buildProductLink(product: WixProduct, siteUrl: string): string {
-  if (product.url?.url) return product.url.url;
-  const path = product.url?.relativePath ?? `/product-page/${product.slug}`;
-  return `${siteUrl}${path}`;
+  // V3 SDK: url can be a string or { relativePath, url }
+  const urlVal = product.url as unknown;
+  if (typeof urlVal === 'string' && urlVal.startsWith('http')) return urlVal;
+  if (typeof urlVal === 'object' && urlVal !== null) {
+    const obj = urlVal as { url?: string; relativePath?: string };
+    if (obj.url) return obj.url;
+    if (obj.relativePath) return `${siteUrl}${obj.relativePath}`;
+  }
+  return `${siteUrl}/product-page/${product.slug}`;
 }
 
 /**
@@ -227,7 +250,7 @@ export function mapToGmc(
 
     return [
       {
-        offerId: variant?.id ?? product.id,
+        offerId: variant?._id ?? variant?.id ?? product._id ?? product.id,
         contentLanguage: 'en',
         feedLabel: 'US',
         productAttributes,
@@ -250,7 +273,7 @@ export function mapToGmc(
       price,
       brand,
       condition,
-      itemGroupId: product.id,
+      itemGroupId: product._id ?? product.id,
     };
 
     if (color) productAttributes.color = color;
@@ -264,7 +287,7 @@ export function mapToGmc(
       productAttributes.additionalImageLinks = additionalImageLinks;
 
     return {
-      offerId: variant.id,
+      offerId: variant._id ?? variant.id,
       contentLanguage: 'en',
       feedLabel: 'US',
       productAttributes,

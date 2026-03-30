@@ -46,26 +46,42 @@ async function fetchAllProducts(): Promise<WixProduct[]> {
           'CURRENCY',
           'PLAIN_DESCRIPTION',
           'MEDIA_ITEMS_INFO',
+          'VARIANT_OPTION_CHOICE_NAMES',
         ],
       },
     );
 
-    const productIds = (response.products ?? []).map((p: any) => p.id);
-    for (const id of productIds) {
-      const fullProduct = await productsV3.getProduct(
-        id,
-        {
-          fields: [
-            'URL',
-            'CURRENCY',
-            'PLAIN_DESCRIPTION',
-            'MEDIA_ITEMS_INFO',
-            'VARIANT_OPTION_CHOICE_NAMES',
-          ],
-        },
-      );
-      if (fullProduct) {
-        products.push(fullProduct as unknown as WixProduct);
+    // Use query results directly for products with 0-1 variants.
+    // Only call getProduct for multi-variant products that need variant detail.
+    for (const p of response.products ?? []) {
+      const product = p as any;
+      const variantCount = product.variantSummary?.variantCount ?? 1;
+
+      if (variantCount > 1) {
+        // Multi-variant: need getProduct for variantsInfo
+        try {
+          const fullProduct = await productsV3.getProduct(
+            product._id ?? product.id,
+            {
+              fields: [
+                'URL',
+                'CURRENCY',
+                'PLAIN_DESCRIPTION',
+                'MEDIA_ITEMS_INFO',
+                'VARIANT_OPTION_CHOICE_NAMES',
+              ],
+            },
+          );
+          if (fullProduct) {
+            products.push(fullProduct as unknown as WixProduct);
+          }
+        } catch {
+          // Fall back to query result if getProduct fails
+          products.push(product as unknown as WixProduct);
+        }
+      } else {
+        // Single variant: query result has everything we need
+        products.push(product as unknown as WixProduct);
       }
     }
 
@@ -109,9 +125,14 @@ export async function runFullSync(
     throw new Error('App not configured. Please complete setup first.');
   }
 
-  const products = options.productIds
+  const allProducts = options.productIds
     ? await fetchProductsByIds(options.productIds)
     : await fetchAllProducts();
+
+  // Cloudflare Workers has a 50 subrequest limit.
+  // Process max 10 products per invocation to stay within limits.
+  const MAX_PRODUCTS_PER_SYNC = 5;
+  const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
 
   const results: SyncResult[] = [];
 
@@ -137,11 +158,11 @@ export async function runFullSync(
       );
 
       for (const gmcProduct of gmcProducts) {
-        const errors = validateGmc(gmcProduct, product.id);
+        const errors = validateGmc(gmcProduct, gmcProduct.offerId);
 
         if (errors.length > 0) {
           validationFailures.push({
-            productId: product.id,
+            productId: gmcProduct.offerId,
             platform: 'gmc',
             success: false,
             errors,

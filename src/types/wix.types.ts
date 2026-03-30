@@ -36,6 +36,7 @@ export interface WixVariantChoice {
 
 /** A single product variant. */
 export interface WixVariant {
+  _id?: string;
   id: string;
   visible?: boolean;
   sku?: string;
@@ -57,6 +58,7 @@ export interface WixMediaItem {
 
 /** Wix product as returned by the Stores V3 SDK. */
 export interface WixProduct {
+  _id?: string;
   id: string;
   name: string;
   slug: string;
