@@ -18,9 +18,13 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
-// Use the iframe's own origin for API calls — this is the app's hosted URL
+import { httpClient } from '@wix/essentials';
+
+// import.meta.url resolves to the app's wix.run origin in production
+const APP_BASE = new URL(import.meta.url).origin;
+
 function appFetch(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(`${window.location.origin}${path}`, init);
+  return httpClient.fetchWithAuth(`${APP_BASE}${path}`, init);
 }
 
 // ─── Shared types & API helpers ──────────────────────────────────────────
