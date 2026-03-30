@@ -19,12 +19,24 @@ import {
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
 import { httpClient } from '@wix/essentials';
+import { dashboard } from '@wix/dashboard';
 
-// import.meta.url resolves to the app's wix.run origin in production
-const APP_BASE = new URL(import.meta.url).origin;
-
-function appFetch(path: string, init?: RequestInit): Promise<Response> {
-  return httpClient.fetchWithAuth(`${APP_BASE}${path}`, init);
+async function appFetch(path: string, init?: RequestInit): Promise<Response> {
+  const baseUrl = new URL(import.meta.url).origin;
+  const fullUrl = `${baseUrl}${path}`;
+  console.log('[SyncStream] appFetch:', fullUrl);
+  try {
+    const res = await httpClient.fetchWithAuth(fullUrl, init);
+    console.log('[SyncStream] response status:', res.status);
+    if (!res.ok) {
+      const text = await res.clone().text();
+      console.error('[SyncStream] error body:', text);
+    }
+    return res;
+  } catch (err) {
+    console.error('[SyncStream] fetch error:', err);
+    throw err;
+  }
 }
 
 // ─── Shared types & API helpers ──────────────────────────────────────────
@@ -102,27 +114,63 @@ async function callInitiateGmcOAuth(): Promise<string> {
   return data.authUrl;
 }
 
+async function exchangeGmcCode(code: string): Promise<void> {
+  const response = await appFetch('/api/gmc-exchange-code', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, instanceId: 'default' }),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: 'Exchange failed' }));
+    throw new Error(data.error ?? 'Exchange failed');
+  }
+}
+
 // ─── Connect Tab ─────────────────────────────────────────────────────────
 
-const ConnectTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
+const ConnectTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> = ({ config, onRefresh }) => {
   const [connecting, setConnecting] = useState(false);
+  const [awaitingCode, setAwaitingCode] = useState(false);
+  const [authCode, setAuthCode] = useState('');
+  const [exchanging, setExchanging] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
   const handleConnectGmc = useCallback(async () => {
     setConnecting(true);
     setError(null);
     try {
       const authUrl = await callInitiateGmcOAuth();
-      window.location.href = authUrl;
+      window.open(authUrl, '_blank');
+      setAwaitingCode(true);
+      setConnecting(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start OAuth flow');
       setConnecting(false);
     }
   }, []);
 
+  const handleExchangeCode = useCallback(async () => {
+    if (!authCode.trim()) return;
+    setExchanging(true);
+    setError(null);
+    try {
+      await exchangeGmcCode(authCode.trim());
+      setSuccess(true);
+      setAwaitingCode(false);
+      setAuthCode('');
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Exchange failed');
+    } finally {
+      setExchanging(false);
+    }
+  }, [authCode, onRefresh]);
+
   return (
     <Box direction="vertical" gap="24px">
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
+      {success && <SectionHelper appearance="success">Google Merchant Center connected successfully!</SectionHelper>}
 
       <Card>
         <Card.Header
@@ -138,12 +186,39 @@ const ConnectTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
                 Connected
               </Text>
             ) : (
-              <Button size="small" onClick={handleConnectGmc} disabled={connecting}>
+              <Button size="small" onClick={handleConnectGmc} disabled={connecting || awaitingCode}>
                 {connecting ? 'Connecting...' : 'Connect'}
               </Button>
             )
           }
         />
+        {awaitingCode && (
+          <>
+            <Card.Divider />
+            <Card.Content>
+              <Box direction="vertical" gap="12px">
+                <Text size="small">
+                  After approving in the Google tab, copy the <strong>code</strong> parameter from the URL bar (the page will show a 404 — that&apos;s expected). Paste it below:
+                </Text>
+                <Box gap="12px" verticalAlign="bottom">
+                  <Box width="100%">
+                    <FormField label="Authorization Code">
+                      <Input
+                        size="small"
+                        placeholder="4/0Aci98E..."
+                        value={authCode}
+                        onChange={(e) => setAuthCode(e.target.value)}
+                      />
+                    </FormField>
+                  </Box>
+                  <Button size="small" onClick={handleExchangeCode} disabled={exchanging || !authCode.trim()}>
+                    {exchanging ? 'Connecting...' : 'Submit Code'}
+                  </Button>
+                </Box>
+              </Box>
+            </Card.Content>
+          </>
+        )}
       </Card>
 
       <Card>
@@ -531,6 +606,26 @@ const SyncStreamPage: FC = () => {
   const loadConfig = useCallback(async () => {
     try {
       const data = await fetchAppConfig();
+
+      // Auto-populate siteUrl from Wix dashboard if not set
+      const siteInfo = dashboard.getSiteInfo();
+      if (siteInfo?.siteUrl) {
+        const currentSiteUrl = data?.fieldMappings?.siteUrl?.defaultValue;
+        if (!currentSiteUrl && siteInfo.siteUrl) {
+          const siteUrl = siteInfo.siteUrl.replace(/\/$/, ''); // strip trailing slash
+          await saveAppConfig({
+            fieldMappings: {
+              ...(data?.fieldMappings ?? {}),
+              siteUrl: { type: 'default', defaultValue: siteUrl },
+            },
+          });
+          // Reload to get updated config
+          const updated = await fetchAppConfig();
+          setConfig(updated);
+          return;
+        }
+      }
+
       setConfig(data);
     } catch {
       // Config doesn't exist yet
@@ -570,7 +665,7 @@ const SyncStreamPage: FC = () => {
               type="compactSide"
             />
 
-            {activeTab === 'connect' && <ConnectTab config={config} />}
+            {activeTab === 'connect' && <ConnectTab config={config} onRefresh={loadConfig} />}
             {activeTab === 'mapping' && <MappingTab config={config} />}
             {activeTab === 'status' && <StatusTab />}
             {activeTab === 'settings' && <SettingsTab config={config} onRefresh={loadConfig} />}

@@ -1,6 +1,7 @@
 /**
  * GET /api/gmc-oauth-init
  * Returns the GMC OAuth authorization URL.
+ * Redirect URI points to editorx.io (will 404 but user copies code from URL).
  */
 import type { APIRoute } from 'astro';
 import { initiateGmcOAuth } from '../../backend/oauthService';

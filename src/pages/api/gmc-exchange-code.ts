@@ -1,25 +1,27 @@
 /**
- * GET /api/gmc-oauth-callback
- * Google redirects here after OAuth consent.
- * Exchanges code for tokens, stores them, then redirects to dashboard.
+ * POST /api/gmc-exchange-code
+ * Exchanges a Google OAuth authorization code for tokens.
+ * Called from the dashboard via httpClient.fetchWithAuth (has Wix auth).
  */
 import type { APIRoute } from 'astro';
 import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens } from '../../backend/oauthService';
 import { registerGcpProject, createDataSource } from '../../backend/gmcClient';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 
-const DASHBOARD_URL = 'https://manage.wix.com/dashboard/014335d7-e2c8-432f-9291-ef9889b31253/6eb9d379-bb51-4edf-8946-60d6f6344b20/sync-stream';
-
-export const GET: APIRoute = async ({ request }) => {
-  const url = new URL(request.url);
-  const code = url.searchParams.get('code');
-  const instanceId = url.searchParams.get('state') ?? 'default';
-
-  if (!code) {
-    return new Response('Missing authorization code', { status: 400 });
-  }
-
+export const POST: APIRoute = async ({ request }) => {
   try {
+    const { code, instanceId } = await request.json() as {
+      code: string;
+      instanceId: string;
+    };
+
+    if (!code) {
+      return new Response(JSON.stringify({ error: 'Missing authorization code' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
     await handleGmcCallback(instanceId, code);
 
     // Register GCP project and create API data source
@@ -46,14 +48,15 @@ export const GET: APIRoute = async ({ request }) => {
     }
     await saveAppConfig(config);
 
-    // Redirect back to dashboard
-    return new Response(null, {
-      status: 302,
-      headers: { Location: DASHBOARD_URL },
+    return new Response(JSON.stringify({ success: true }), {
+      headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : 'Unknown error';
-    return new Response(`OAuth failed: ${message}`, { status: 500 });
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 };

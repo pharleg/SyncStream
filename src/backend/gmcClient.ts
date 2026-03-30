@@ -145,12 +145,13 @@ export async function batchInsertProducts(
 export async function registerGcpProject(
   merchantId: string,
   accessToken: string,
+  developerEmail: string = 'curtis.mcewen@purposefulit.com',
 ): Promise<void> {
   try {
     await gmcFetch<unknown>(
       `/accounts/v1/accounts/${merchantId}/developerRegistration:registerGcp`,
       accessToken,
-      { method: 'POST', body: '{}' },
+      { method: 'POST', body: JSON.stringify({ developerEmail }) },
     );
   } catch {
     // May fail if already registered — that's fine
