@@ -160,7 +160,7 @@ const MappingPage: FC = () => {
                           />
                         </FormField>
                       </Box>
-                      <Box grow={1}>
+                      <Box>
                         <FormField
                           label={
                             mapping.type === 'customField'

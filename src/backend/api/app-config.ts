@@ -49,7 +49,7 @@ export async function POST(context: APIContext) {
 
     // Apply updates
     if (body.fieldMappings !== undefined) {
-      config.fieldMappings = body.fieldMappings;
+      config.fieldMappings = body.fieldMappings as import('../../types/wix.types').FieldMappings;
     }
     if (body.syncEnabled !== undefined) {
       config.syncEnabled = body.syncEnabled;
