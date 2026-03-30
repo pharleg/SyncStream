@@ -19,6 +19,8 @@
     "@wix/data": "^1.0.430",
     "@wix/design-system": "^1.0.0",
     "@wix/essentials": "^0.1.23",
+    "@wix/secrets": "^1.0.70",
+    "@wix/stores": "^1.0.737",
     "astro": "^5.8.0",
     "typescript": "^5.8.3"
   },

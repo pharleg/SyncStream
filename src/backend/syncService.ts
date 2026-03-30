@@ -31,12 +31,12 @@ import {
  * Each product requires a second getProduct call for variant data.
  */
 async function fetchAllProducts(): Promise<WixProduct[]> {
-  const { catalogV3 } = await import('@wix/stores');
+  const { productsV3 } = await import('@wix/stores');
   const products: WixProduct[] = [];
   let cursor: string | undefined;
 
   do {
-    const response = await catalogV3.CatalogApi.queryProducts(
+    const response = await productsV3.queryProducts(
       {
         cursorPaging: { limit: 100, cursor },
       },
@@ -52,7 +52,7 @@ async function fetchAllProducts(): Promise<WixProduct[]> {
 
     const productIds = (response.products ?? []).map((p: any) => p.id);
     for (const id of productIds) {
-      const fullProduct = await catalogV3.CatalogApi.getProduct(
+      const fullProduct = await productsV3.getProduct(
         id,
         {
           fields: [
@@ -79,11 +79,11 @@ async function fetchAllProducts(): Promise<WixProduct[]> {
 async function fetchProductsByIds(
   productIds: string[],
 ): Promise<WixProduct[]> {
-  const { catalogV3 } = await import('@wix/stores');
+  const { productsV3 } = await import('@wix/stores');
   const products: WixProduct[] = [];
 
   for (const id of productIds) {
-    const product = await catalogV3.CatalogApi.getProduct(id, {
+    const product = await productsV3.getProduct(id, {
       fields: [
         'URL',
         'CURRENCY',

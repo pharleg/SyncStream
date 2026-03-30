@@ -7,21 +7,38 @@
  *        meta_access_token_{instanceId}, meta_refresh_token_{instanceId}
  */
 
-import { secrets } from '@wix/essentials';
+import { secrets } from '@wix/secrets';
 import type { GmcTokens } from '../types/gmc.types';
 
 const GMC_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const GMC_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const GMC_SCOPE = 'https://www.googleapis.com/auth/content';
 
+/** Upsert a secret by name — create if new, update if exists. */
+async function upsertSecret(name: string, value: string): Promise<void> {
+  const { secrets: existing } = await secrets.listSecretInfo();
+  const found = existing?.find((s) => s.name === name);
+  if (found?._id) {
+    await secrets.updateSecret(found._id, { value });
+  } else {
+    await secrets.createSecret({ name, value });
+  }
+}
+
+/** Get a secret value by name. */
+async function getSecret(name: string): Promise<string> {
+  const result = await secrets.getSecretValue(name);
+  return result.value ?? '';
+}
+
 async function getGmcClientCredentials(): Promise<{
   clientId: string;
   clientSecret: string;
   redirectUri: string;
 }> {
-  const clientId = await secrets.getSecret('gmc_client_id');
-  const clientSecret = await secrets.getSecret('gmc_client_secret');
-  const redirectUri = await secrets.getSecret('gmc_redirect_uri');
+  const clientId = await getSecret('gmc_client_id');
+  const clientSecret = await getSecret('gmc_client_secret');
+  const redirectUri = await getSecret('gmc_redirect_uri');
   return { clientId, clientSecret, redirectUri };
 }
 
@@ -71,15 +88,15 @@ export async function handleGmcCallback(
     expires_in: number;
   };
 
-  await secrets.createOrUpdateSecret(
+  await upsertSecret(
     `gmc_access_token_${instanceId}`,
     data.access_token,
   );
-  await secrets.createOrUpdateSecret(
+  await upsertSecret(
     `gmc_refresh_token_${instanceId}`,
     data.refresh_token,
   );
-  await secrets.createOrUpdateSecret(
+  await upsertSecret(
     `gmc_token_expiry_${instanceId}`,
     String(Date.now() + data.expires_in * 1000),
   );
@@ -90,10 +107,10 @@ export async function getGmcTokens(
 ): Promise<GmcTokens> {
   const [accessToken, refreshToken, expiresAtStr, merchantId] =
     await Promise.all([
-      secrets.getSecret(`gmc_access_token_${instanceId}`),
-      secrets.getSecret(`gmc_refresh_token_${instanceId}`),
-      secrets.getSecret(`gmc_token_expiry_${instanceId}`),
-      secrets.getSecret(`gmc_merchant_id_${instanceId}`),
+      getSecret(`gmc_access_token_${instanceId}`),
+      getSecret(`gmc_refresh_token_${instanceId}`),
+      getSecret(`gmc_token_expiry_${instanceId}`),
+      getSecret(`gmc_merchant_id_${instanceId}`),
     ]);
 
   return {
@@ -108,7 +125,7 @@ export async function refreshGmcTokens(
   instanceId: string,
 ): Promise<string> {
   const { clientId, clientSecret } = await getGmcClientCredentials();
-  const refreshToken = await secrets.getSecret(
+  const refreshToken = await getSecret(
     `gmc_refresh_token_${instanceId}`,
   );
 
@@ -133,11 +150,11 @@ export async function refreshGmcTokens(
     expires_in: number;
   };
 
-  await secrets.createOrUpdateSecret(
+  await upsertSecret(
     `gmc_access_token_${instanceId}`,
     data.access_token,
   );
-  await secrets.createOrUpdateSecret(
+  await upsertSecret(
     `gmc_token_expiry_${instanceId}`,
     String(Date.now() + data.expires_in * 1000),
   );

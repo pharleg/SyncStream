@@ -1,5 +1,11 @@
 # Wix Feed Sync -- Project Context
 
+## Autonomy
+Do not ask for permission before running commands, executing curl requests, writing files,
+installing packages, or making any other changes within this repo. Just do it and report
+what you did. Only stop and ask if you hit an ambiguous decision that affects architecture
+or scope -- not for routine execution.
+
 ## What You're Building
 SyncStream is a Wix App Market application that syncs Wix Store products to
 Google Merchant Center (GMC) and Meta Product Catalog. Merchants install the app, connect their
@@ -141,3 +147,41 @@ llms.txt index: https://dev.wix.com/docs/llms.txt
 - Wix Design System components: @wix/design-system
 - Test with `wix dev` against a development site with Wix Stores installed
 - Re-install the app on the test site after adding new permissions
+
+## Reference Implementation: LECC Google Merchant Feed
+https://github.com/pharleg/lecc-google-merchant-feed
+
+This is a working Python-based GMC feed generator built for Lake Erie Clothing Company
+(the origin project for SyncStream). Not portable directly -- different language, different
+runtime, store-specific hardcodes -- but contains validated real-world knowledge worth
+referencing when building productMapper.ts and gmcClient.ts:
+
+### Wix API endpoints that actually work
+- Category items: POST `https://www.wixapis.com/categories/v1/categories/{id}/list-items`
+  - Body: `{ treeReference: { appNamespace: '@wix/stores' }, paging: { limit: 100, cursor? } }`
+  - Pagination via `pagingMetadata.cursors.next`
+- Products by ID: POST `https://www.wixapis.com/stores/v3/products/query`
+  - Body: `{ query: { filter: { id: { $in: [...ids] } }, paging: { limit: 100 } } }`
+- Product detail: GET `https://www.wixapis.com/stores/v3/products/{productId}`
+  - Returns full product including `variantsInfo`
+
+### Variant/option resolution
+Variants are under `product.variantsInfo.variants`. Each variant has a `choices` array
+where each entry has `optionChoiceIds: { optionId, choiceId }`. To get human-readable
+color/size names, resolve against `product.options[].choicesSettings.choices[]`.
+See `get_choice_name()` in generate_feed.py for the exact lookup logic.
+
+### Price path fallback chain
+Wix product price is inconsistently nested across API versions. Try in order:
+1. `product.actualPriceRange.minValue.amount`
+2. `product.priceData.price`
+3. `product.price.price`
+
+### item_group_id pattern
+For products with multiple variants, set `item_group_id = product.id` on all variant rows.
+For single-variant products, leave it empty. This is required by GMC for apparel.
+
+### category_map.json
+The repo includes a keyword-to-Google-taxonomy mapping file. This is the seed data
+for SyncStream's category mapping feature (Phase 5). Port to TypeScript and make it
+merchant-configurable rather than hardcoded.

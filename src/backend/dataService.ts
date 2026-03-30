@@ -3,6 +3,12 @@
  *
  * CRUD helpers for AppConfig and SyncState Wix Data collections.
  * All Wix Data access is centralized here.
+ *
+ * Wix Data SDK API:
+ *   items.query(collectionId) → WixDataQuery builder (.eq(), .limit(), .find())
+ *   items.insert(collectionId, item) → Promise<Item>
+ *   items.update(collectionId, item) → Promise<Item>  (requires _id)
+ *   items.save(collectionId, item) → Promise<Item>    (upsert: insert or update)
  */
 
 import { items } from '@wix/data';
@@ -15,33 +21,33 @@ export async function getAppConfig(
   instanceId: string,
 ): Promise<AppConfig | null> {
   const result = await items
-    .queryDataItems({ dataCollectionId: COLLECTION_APP_CONFIG })
+    .query(COLLECTION_APP_CONFIG)
     .eq('instanceId', instanceId)
     .limit(1)
     .find();
 
-  const item = result.items?.[0]?.data;
+  const item = result.items?.[0];
   if (!item) return null;
 
   return {
-    instanceId: item.instanceId,
-    gmcConnected: item.gmcConnected ?? false,
-    metaConnected: item.metaConnected ?? false,
+    instanceId: item.instanceId as string,
+    gmcConnected: (item.gmcConnected as boolean) ?? false,
+    metaConnected: (item.metaConnected as boolean) ?? false,
     fieldMappings: item.fieldMappings
-      ? JSON.parse(item.fieldMappings)
+      ? JSON.parse(item.fieldMappings as string)
       : {},
-    syncEnabled: item.syncEnabled ?? false,
+    syncEnabled: (item.syncEnabled as boolean) ?? false,
     lastFullSync: item.lastFullSync
-      ? new Date(item.lastFullSync)
+      ? new Date(item.lastFullSync as string)
       : null,
-  } as AppConfig;
+  };
 }
 
 export async function saveAppConfig(
   config: AppConfig,
 ): Promise<void> {
   const existing = await items
-    .queryDataItems({ dataCollectionId: COLLECTION_APP_CONFIG })
+    .query(COLLECTION_APP_CONFIG)
     .eq('instanceId', config.instanceId)
     .limit(1)
     .find();
@@ -56,18 +62,12 @@ export async function saveAppConfig(
   };
 
   if (existing.items?.[0]) {
-    await items.updateDataItem({
-      dataCollectionId: COLLECTION_APP_CONFIG,
-      dataItem: {
-        _id: existing.items[0]._id,
-        data,
-      },
+    await items.update(COLLECTION_APP_CONFIG, {
+      ...data,
+      _id: existing.items[0]._id,
     });
   } else {
-    await items.insertDataItem({
-      dataCollectionId: COLLECTION_APP_CONFIG,
-      dataItem: { data },
-    });
+    await items.insert(COLLECTION_APP_CONFIG, data);
   }
 }
 
@@ -76,30 +76,30 @@ export async function getSyncState(
   platform: 'gmc' | 'meta',
 ): Promise<SyncState | null> {
   const result = await items
-    .queryDataItems({ dataCollectionId: COLLECTION_SYNC_STATE })
+    .query(COLLECTION_SYNC_STATE)
     .eq('productId', productId)
     .eq('platform', platform)
     .limit(1)
     .find();
 
-  const item = result.items?.[0]?.data;
+  const item = result.items?.[0];
   if (!item) return null;
 
   return {
-    productId: item.productId,
-    platform: item.platform,
-    status: item.status,
-    lastSynced: new Date(item.lastSynced),
-    errorLog: item.errorLog ? JSON.parse(item.errorLog) : null,
-    externalId: item.externalId ?? '',
-  } as SyncState;
+    productId: item.productId as string,
+    platform: item.platform as 'gmc' | 'meta',
+    status: item.status as SyncState['status'],
+    lastSynced: new Date(item.lastSynced as string),
+    errorLog: item.errorLog ? JSON.parse(item.errorLog as string) : null,
+    externalId: (item.externalId as string) ?? '',
+  };
 }
 
 export async function upsertSyncState(
   state: SyncState,
 ): Promise<void> {
   const existing = await items
-    .queryDataItems({ dataCollectionId: COLLECTION_SYNC_STATE })
+    .query(COLLECTION_SYNC_STATE)
     .eq('productId', state.productId)
     .eq('platform', state.platform)
     .limit(1)
@@ -115,18 +115,12 @@ export async function upsertSyncState(
   };
 
   if (existing.items?.[0]) {
-    await items.updateDataItem({
-      dataCollectionId: COLLECTION_SYNC_STATE,
-      dataItem: {
-        _id: existing.items[0]._id,
-        data,
-      },
+    await items.update(COLLECTION_SYNC_STATE, {
+      ...data,
+      _id: existing.items[0]._id,
     });
   } else {
-    await items.insertDataItem({
-      dataCollectionId: COLLECTION_SYNC_STATE,
-      dataItem: { data },
-    });
+    await items.insert(COLLECTION_SYNC_STATE, data);
   }
 }
 
