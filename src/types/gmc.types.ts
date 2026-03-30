@@ -1,41 +1,65 @@
-/** Product entry for the Google Content API for Shopping v2.1. */
-export interface GmcProduct {
-  offerId: string;
+/**
+ * Types for Google Merchant API v1.
+ * Replaces Content API for Shopping v2.1 (sunsetting Aug 2026).
+ * Docs: https://developers.google.com/merchant/api/reference/rest
+ */
+
+/** Price in micros format. 1,000,000 micros = 1 currency unit. */
+export interface GmcPrice {
+  amountMicros: string; // e.g. "14990000" for $14.99
+  currencyCode: string; // e.g. "USD"
+}
+
+/** ProductInput attributes for Merchant API v1. */
+export interface GmcProductAttributes {
   title: string;
   description: string;
   link: string;
   imageLink: string;
-  availability: 'in_stock' | 'out_of_stock';
-  price: { value: string; currency: string };
-  brand: string;
-  gtin?: string;
-  mpn?: string;
-  condition: 'new' | 'refurbished' | 'used';
-  contentLanguage: string;
-  targetCountry: string;
-  channel: string;
-  itemGroupId?: string;
   additionalImageLinks?: string[];
+  availability: 'IN_STOCK' | 'OUT_OF_STOCK' | 'PREORDER' | 'BACKORDER';
+  price: GmcPrice;
+  salePrice?: GmcPrice;
+  condition: 'NEW' | 'USED' | 'REFURBISHED';
+  brand: string;
+  gtins?: string[];
+  mpn?: string;
+  identifierExists?: boolean;
+  itemGroupId?: string;
   color?: string;
-  sizes?: string[];
+  size?: string;
   ageGroup?: string;
   gender?: string;
   googleProductCategory?: string;
-  salePrice?: { value: string; currency: string };
-  identifierExists?: boolean;
 }
 
-/** Response from a GMC products.insert / products.custombatch call. */
-export interface GmcInsertResponse {
-  id: string;
+/**
+ * ProductInput resource — the writable product format.
+ * Write to productInputs, read from products.
+ */
+export interface GmcProductInput {
   offerId: string;
-  errors?: GmcError[];
+  contentLanguage: string;
+  feedLabel: string;
+  productAttributes: GmcProductAttributes;
+  /** Resource name, set by API on response. */
+  name?: string;
 }
 
+/** Response from productInputs:insert. */
+export interface GmcInsertResponse {
+  name: string;
+  offerId: string;
+  contentLanguage: string;
+  feedLabel: string;
+  productAttributes: GmcProductAttributes;
+}
+
+/** Error from Merchant API. */
 export interface GmcError {
-  domain: string;
-  reason: string;
+  code: number;
   message: string;
+  status?: string;
 }
 
 /** OAuth token pair stored in Wix Secrets Manager. */
@@ -44,6 +68,7 @@ export interface GmcTokens {
   refreshToken: string;
   expiresAt: number;
   merchantId: string;
+  dataSourceId?: string;
 }
 
 /** Configuration for GMC OAuth (loaded from environment/secrets). */
@@ -54,26 +79,10 @@ export interface GmcOAuthConfig {
   scope: string;
 }
 
-/** A single entry in a custombatch request. */
-export interface GmcBatchEntry {
-  batchId: number;
-  merchantId: string;
-  method: 'insert' | 'get' | 'delete';
-  product?: GmcProduct;
-  productId?: string; // REST ID for get/delete: "online:en:US:{offerId}"
-}
-
-/** Response from custombatch. */
-export interface GmcBatchResponse {
-  entries: GmcBatchResponseEntry[];
-}
-
-export interface GmcBatchResponseEntry {
-  batchId: number;
-  product?: { id: string; offerId: string };
-  errors?: {
-    errors: GmcError[];
-    code: number;
-    message: string;
-  };
+/** Result of a single product insert attempt. */
+export interface GmcInsertResult {
+  offerId: string;
+  success: boolean;
+  name?: string;
+  error?: string;
 }
