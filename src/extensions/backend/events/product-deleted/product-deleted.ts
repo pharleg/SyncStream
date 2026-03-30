@@ -5,7 +5,7 @@ import { getAppConfig, upsertSyncState } from '../../../../backend/dataService';
 import type { SyncState } from '../../../../types/wix.types';
 
 export default products.onProductDeleted(async (event) => {
-  const productId = event.metadata?.entityId;
+  const productId = event.data?.productId;
   const instanceId = event.metadata?.instanceId;
   if (!productId || !instanceId) return;
 

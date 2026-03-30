@@ -3,7 +3,7 @@ import { syncProduct } from '../../../../backend/syncService';
 import { getAppConfig } from '../../../../backend/dataService';
 
 export default products.onProductCreated(async (event) => {
-  const productId = event.metadata?.entityId;
+  const productId = event.data?.productId;
   const instanceId = event.metadata?.instanceId;
   if (!productId || !instanceId) return;
 

@@ -2,8 +2,8 @@ import { products } from '@wix/stores';
 import { syncProduct } from '../../../../backend/syncService';
 import { getAppConfig } from '../../../../backend/dataService';
 
-export default products.onProductUpdated(async (event) => {
-  const productId = event.metadata?.entityId;
+export default products.onProductChanged(async (event) => {
+  const productId = event.data?.productId;
   const instanceId = event.metadata?.instanceId;
   if (!productId || !instanceId) return;
 
