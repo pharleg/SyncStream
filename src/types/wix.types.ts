@@ -1,24 +1,89 @@
-/** Wix product as returned by the Stores Products API. */
-export interface WixProduct {
-  _id: string;
+/** Price as returned by Wix V3 SDK. */
+export interface WixPrice {
+  amount: string;
+  formattedAmount?: string;
+}
+
+/** Range of prices across variants. */
+export interface WixPriceRange {
+  minValue?: WixPrice;
+  maxValue?: WixPrice;
+}
+
+/** A single option choice (e.g. "Red", "Large"). */
+export interface WixOptionChoice {
   name: string;
-  description: string;
+  choiceId?: string;
+  inStock?: boolean;
+  visible?: boolean;
+}
+
+/** A product option (e.g. "Color", "Size"). */
+export interface WixProductOption {
+  id: string;
+  name: string;
+  optionRenderType?: string;
+  choicesSettings?: {
+    choices: WixOptionChoice[];
+  };
+}
+
+/** Variant choice reference linking optionId+choiceId to names. */
+export interface WixVariantChoice {
+  optionChoiceIds?: { optionId: string; choiceId: string };
+  optionChoiceNames?: { optionName: string; choiceName: string };
+}
+
+/** A single product variant. */
+export interface WixVariant {
+  id: string;
+  visible?: boolean;
+  sku?: string;
+  barcode?: string;
+  choices: WixVariantChoice[];
+  price?: {
+    actualPrice?: WixPrice;
+    compareAtPrice?: WixPrice;
+  };
+  inventoryStatus?: { inStock: boolean };
+  media?: { mainMedia?: { image?: { url: string } } };
+}
+
+/** Media item in the product media gallery. */
+export interface WixMediaItem {
+  image?: { url: string; altText?: string };
+  mediaType?: string;
+}
+
+/** Wix product as returned by the Stores V3 SDK. */
+export interface WixProduct {
+  id: string;
+  name: string;
   slug: string;
-  sku: string;
-  price: {
-    amount: string;
-    currency: string;
+  description?: string;
+  plainDescription?: string;
+  url?: { relativePath?: string; url?: string };
+  brand?: { id?: string; name?: string };
+  media?: {
+    main?: { image?: { url: string }; thumbnail?: { url: string } };
+    itemsInfo?: { items?: WixMediaItem[] };
   };
-  media: {
-    mainMedia?: {
-      image?: { url: string };
-    };
+  inventory?: {
+    availabilityStatus?: 'IN_STOCK' | 'OUT_OF_STOCK' | 'PARTIALLY_OUT_OF_STOCK';
   };
-  stock: {
-    inStock: boolean;
-  };
+  actualPriceRange?: WixPriceRange;
+  compareAtPriceRange?: WixPriceRange;
+  currency?: string;
+  options?: WixProductOption[];
+  variantsInfo?: { variants: WixVariant[] };
+  variantSummary?: { variantCount: number };
+  extendedFields?: { namespaces?: Record<string, Record<string, unknown>> };
   customFields?: Record<string, string>;
-  productPageUrl?: { path: string };
+  productType?: 'PHYSICAL' | 'DIGITAL';
+  visible?: boolean;
+  /** Legacy price paths (V1/V2 compat). */
+  priceData?: { price?: number | string; currency?: string };
+  price?: { price?: number | string; currency?: string };
 }
 
 /** Shape stored in the AppConfig Wix Data collection. */
