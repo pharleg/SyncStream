@@ -2,18 +2,18 @@ import type { FC } from 'react';
 import { EmptyState, Page, WixDesignSystemProvider } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
 
-const DashboardPage: FC = () => {
+const ConnectPage: FC = () => {
   return (
     <WixDesignSystemProvider features={{ newColorsBranding: true }}>
       <Page>
         <Page.Header
-          title="My Page"
-          subtitle="This is a subtitle for your page"
+          title="Connect"
+          subtitle="Connect your Google Merchant Center and Meta accounts"
         />
         <Page.Content>
           <EmptyState
-            title="My Page"
-            subtitle="Edit src/extensions/my-page/page.tsx to change this text."
+            title="Connect Your Accounts"
+            subtitle="Link your GMC and Meta accounts to start syncing products."
             skin="page"
           />
         </Page.Content>
@@ -22,4 +22,4 @@ const DashboardPage: FC = () => {
   );
 };
 
-export default DashboardPage;
+export default ConnectPage;
