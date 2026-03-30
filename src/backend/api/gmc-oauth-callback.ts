@@ -4,7 +4,8 @@
  * Exchanges code for tokens and stores them.
  */
 import type { APIContext } from 'astro';
-import { handleGmcCallback } from '../oauthService';
+import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens } from '../oauthService';
+import { registerGcpProject, createDataSource } from '../gmcClient';
 import { getAppConfig, saveAppConfig } from '../dataService';
 
 export async function GET(context: APIContext) {
@@ -18,6 +19,12 @@ export async function GET(context: APIContext) {
   try {
     await handleGmcCallback(instanceId, code);
 
+    // Register GCP project and create API data source
+    const accessToken = await getValidGmcAccessToken(instanceId);
+    const tokens = await getGmcTokens(instanceId);
+    await registerGcpProject(tokens.merchantId, accessToken);
+    const dataSourceId = await createDataSource(tokens.merchantId, accessToken);
+
     // Mark GMC as connected in AppConfig
     let config = await getAppConfig(instanceId);
     if (!config) {
@@ -28,9 +35,11 @@ export async function GET(context: APIContext) {
         fieldMappings: {},
         syncEnabled: false,
         lastFullSync: null,
+        gmcDataSourceId: dataSourceId,
       };
     } else {
       config.gmcConnected = true;
+      config.gmcDataSourceId = dataSourceId;
     }
     await saveAppConfig(config);
 

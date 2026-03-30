@@ -17,7 +17,7 @@ export default products.onProductDeleted(async (event) => {
     try {
       const accessToken = await getValidGmcAccessToken(instanceId);
       const tokens = await getGmcTokens(instanceId);
-      await deleteGmcProduct(tokens.merchantId, productId, accessToken);
+      await deleteGmcProduct(tokens.merchantId, config.gmcDataSourceId ?? '', productId, 'en', 'US', accessToken);
 
       const syncState: SyncState = {
         productId,

@@ -12,7 +12,7 @@ import type {
   SyncResult,
 } from '../types/sync.types';
 import type { WixProduct, SyncState } from '../types/wix.types';
-import type { GmcProduct, GmcBatchResponseEntry } from '../types/gmc.types';
+import type { GmcProductInput, GmcInsertResult } from '../types/gmc.types';
 import { mapToGmc } from './productMapper';
 import { validateGmc } from './validator';
 import { batchInsertProducts } from './gmcClient';
@@ -126,7 +126,7 @@ export async function runFullSync(
     const tokens = await getGmcTokens(instanceId);
 
     // Map and validate all products
-    const validProducts: GmcProduct[] = [];
+    const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
 
     for (const product of products) {
@@ -158,32 +158,30 @@ export async function runFullSync(
     if (validProducts.length > 0) {
       const batchResults = await batchInsertProducts(
         tokens.merchantId,
+        config.gmcDataSourceId ?? '',
         validProducts,
         accessToken,
       );
 
-      for (const entry of batchResults) {
-        const gmcProduct = validProducts[entry.batchId];
-        if (!gmcProduct) continue;
-
-        if (entry.errors) {
+      for (const result of batchResults) {
+        if (result.success) {
           results.push({
-            productId: gmcProduct.offerId,
+            productId: result.offerId,
             platform: 'gmc',
-            success: false,
-            errors: entry.errors.errors.map((e) => ({
-              field: 'api',
-              platform: 'gmc' as const,
-              message: e.message,
-              productId: gmcProduct.offerId,
-            })),
+            success: true,
+            externalId: result.name,
           });
         } else {
           results.push({
-            productId: gmcProduct.offerId,
+            productId: result.offerId,
             platform: 'gmc',
-            success: true,
-            externalId: entry.product?.id,
+            success: false,
+            errors: [{
+              field: 'api',
+              platform: 'gmc' as const,
+              message: result.error ?? 'Unknown error',
+              productId: result.offerId,
+            }],
           });
         }
       }

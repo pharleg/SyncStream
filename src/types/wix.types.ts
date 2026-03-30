@@ -94,6 +94,8 @@ export interface AppConfig {
   fieldMappings: FieldMappings;
   syncEnabled: boolean;
   lastFullSync: Date | null;
+  /** Merchant API data source ID for product uploads. */
+  gmcDataSourceId?: string;
 }
 
 /** Flexible field-mapping model.
