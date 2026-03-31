@@ -55,6 +55,8 @@ interface AppConfigData {
   fieldMappings: FieldMappings;
   syncEnabled: boolean;
   lastFullSync: string | null;
+  aiEnhancementEnabled?: boolean;
+  aiEnhancementStyle?: string;
 }
 
 interface SyncRecord {
@@ -236,7 +238,7 @@ const ConnectTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> = 
   );
 };
 
-// ─── Mapping Tab ─────────────────────────────────────────────────────────
+// ─── Mapping Tab (with Rules & Filters sub-tabs) ────────────────────────
 
 const MAPPING_FIELDS = [
   { key: 'siteUrl', label: 'Site URL', description: 'Your store base URL (e.g. https://www.example.com)', placeholder: 'https://www.example.com' },
@@ -252,11 +254,125 @@ const TYPE_OPTIONS = [
   { id: 'customField', value: 'Wix Custom Field' },
 ];
 
+const PLATFORM_OPTIONS = [
+  { id: 'both', value: 'Both' },
+  { id: 'gmc', value: 'Google Merchant Center' },
+  { id: 'meta', value: 'Meta Catalog' },
+];
+
+const RULE_TYPE_OPTIONS = [
+  { id: 'static', value: 'Static Value' },
+  { id: 'concatenate', value: 'Concatenate' },
+  { id: 'calculator', value: 'Calculator' },
+];
+
+const OPERATOR_OPTIONS = [
+  { id: 'equals', value: 'Equals' },
+  { id: 'not_equals', value: 'Not Equals' },
+  { id: 'contains', value: 'Contains' },
+  { id: 'greater_than', value: 'Greater Than' },
+  { id: 'less_than', value: 'Less Than' },
+];
+
+const CALC_OPERATOR_OPTIONS = [
+  { id: '+', value: 'Add (+)' },
+  { id: '-', value: 'Subtract (-)' },
+  { id: '*', value: 'Multiply (×)' },
+  { id: '/', value: 'Divide (÷)' },
+];
+
+const CONDITION_GROUP_OPTIONS = [
+  { id: 'AND', value: 'AND (all must match)' },
+  { id: 'OR', value: 'OR (any match)' },
+];
+
+const MAPPING_SUB_TABS = [
+  { id: 'fields', title: 'Field Mapping' },
+  { id: 'rules', title: 'Rules' },
+  { id: 'filters', title: 'Filters' },
+];
+
+interface SyncRule {
+  id?: string;
+  instanceId: string;
+  name: string;
+  platform: string;
+  field: string;
+  type: string;
+  expression: any;
+  order: number;
+  enabled: boolean;
+}
+
+interface SyncFilter {
+  id?: string;
+  instanceId: string;
+  name: string;
+  platform: string;
+  field: string;
+  operator: string;
+  value: string;
+  conditionGroup: string;
+  order: number;
+  enabled: boolean;
+}
+
+function buildExpression(type: string, exprState: any): any {
+  switch (type) {
+    case 'static':
+      return { value: exprState.staticValue ?? '' };
+    case 'concatenate':
+      return {
+        parts: (exprState.concatValue ?? '').split(/(\{[^}]+\})/).filter(Boolean).map((part: string) => {
+          if (part.startsWith('{') && part.endsWith('}')) {
+            return { type: 'field', value: part.slice(1, -1) };
+          }
+          return { type: 'literal', value: part };
+        }),
+      };
+    case 'calculator':
+      return {
+        field: exprState.calcField ?? '',
+        operator: exprState.calcOperator ?? '+',
+        operand: parseFloat(exprState.calcOperand) || 0,
+      };
+    default:
+      return {};
+  }
+}
+
 const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
+  const [subTab, setSubTab] = useState('fields');
   const [mappings, setMappings] = useState<FieldMappings>(config?.fieldMappings ?? {});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  // Rules state
+  const [rules, setRules] = useState<SyncRule[]>([]);
+  const [showRuleForm, setShowRuleForm] = useState(false);
+  const [newRule, setNewRule] = useState({ name: '', platform: 'both', field: '', type: 'static' });
+  const [exprState, setExprState] = useState({ staticValue: '', concatValue: '', calcField: '', calcOperator: '+', calcOperand: '' });
+
+  // Filters state
+  const [filters, setFilters] = useState<SyncFilter[]>([]);
+  const [showFilterForm, setShowFilterForm] = useState(false);
+  const [newFilter, setNewFilter] = useState({ name: '', platform: 'both', field: '', operator: 'equals', value: '', conditionGroup: 'AND' });
+
+  useEffect(() => {
+    appFetch('/api/rules?instanceId=default').then((r) => r.json()).then(setRules).catch(() => {});
+    appFetch('/api/filters?instanceId=default').then((r) => r.json()).then(setFilters).catch(() => {});
+  }, []);
+
+  const reloadRules = useCallback(async () => {
+    const r = await appFetch('/api/rules?instanceId=default');
+    setRules(await r.json());
+  }, []);
+
+  const reloadFilters = useCallback(async () => {
+    const r = await appFetch('/api/filters?instanceId=default');
+    setFilters(await r.json());
+  }, []);
 
   const updateMapping = useCallback(
     (key: string, update: Partial<FieldMapping>) => {
@@ -264,7 +380,7 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
         ...prev,
         [key]: { type: 'default', ...prev[key], ...update } as FieldMapping,
       }));
-      setSuccess(false);
+      setSuccess(null);
     },
     [],
   );
@@ -272,10 +388,10 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
   const handleSave = useCallback(async () => {
     setSaving(true);
     setError(null);
-    setSuccess(false);
+    setSuccess(null);
     try {
       await saveAppConfig({ fieldMappings: mappings });
-      setSuccess(true);
+      setSuccess('Mappings saved successfully.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
@@ -283,66 +399,303 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
     }
   }, [mappings]);
 
+  const handleSaveRule = useCallback(async () => {
+    setSaving(true); setError(null);
+    try {
+      await appFetch('/api/rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceId: 'default', name: newRule.name, platform: newRule.platform,
+          field: newRule.field, type: newRule.type,
+          expression: buildExpression(newRule.type, exprState),
+          order: rules.length, enabled: true,
+        }),
+      });
+      await reloadRules();
+      setShowRuleForm(false);
+      setNewRule({ name: '', platform: 'both', field: '', type: 'static' });
+      setExprState({ staticValue: '', concatValue: '', calcField: '', calcOperator: '+', calcOperand: '' });
+      setSuccess('Rule saved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save rule');
+    } finally { setSaving(false); }
+  }, [newRule, exprState, rules.length, reloadRules]);
+
+  const handleDeleteRule = useCallback(async (id: string) => {
+    try {
+      await appFetch(`/api/rules?id=${id}`, { method: 'DELETE' });
+      await reloadRules();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete rule');
+    }
+  }, [reloadRules]);
+
+  const handleSaveFilter = useCallback(async () => {
+    setSaving(true); setError(null);
+    try {
+      await appFetch('/api/filters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceId: 'default', name: newFilter.name, platform: newFilter.platform,
+          field: newFilter.field, operator: newFilter.operator, value: newFilter.value,
+          conditionGroup: newFilter.conditionGroup, order: filters.length, enabled: true,
+        }),
+      });
+      await reloadFilters();
+      setShowFilterForm(false);
+      setNewFilter({ name: '', platform: 'both', field: '', operator: 'equals', value: '', conditionGroup: 'AND' });
+      setSuccess('Filter saved.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save filter');
+    } finally { setSaving(false); }
+  }, [newFilter, filters.length, reloadFilters]);
+
+  const handleDeleteFilter = useCallback(async (id: string) => {
+    try {
+      await appFetch(`/api/filters?id=${id}`, { method: 'DELETE' });
+      await reloadFilters();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete filter');
+    }
+  }, [reloadFilters]);
+
   return (
     <Box direction="vertical" gap="18px">
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
-      {success && <SectionHelper appearance="success">Mappings saved successfully.</SectionHelper>}
+      {success && <SectionHelper appearance="success">{success}</SectionHelper>}
 
-      <Box>
-        <Button onClick={handleSave} disabled={saving} size="small">
-          {saving ? 'Saving...' : 'Save Mappings'}
-        </Button>
-      </Box>
+      <Tabs
+        items={MAPPING_SUB_TABS}
+        activeId={subTab}
+        onClick={(tab) => { setSubTab(String(tab.id)); setError(null); setSuccess(null); }}
+      />
 
-      {MAPPING_FIELDS.map((field) => {
-        const mapping = mappings[field.key] ?? { type: 'default' as const };
-        return (
-          <Card key={field.key}>
-            <Card.Header title={field.label} subtitle={field.description} />
-            <Card.Divider />
-            <Card.Content>
-              <Box gap="12px" verticalAlign="bottom">
-                <Box width="200px">
-                  <FormField label="Mapping Type">
-                    <Dropdown
-                      size="small"
-                      options={TYPE_OPTIONS}
-                      selectedId={mapping.type ?? 'default'}
-                      onSelect={(option) =>
-                        updateMapping(field.key, {
-                          type: option.id as 'default' | 'customField',
-                        })
-                      }
-                    />
-                  </FormField>
+      {/* ── Field Mapping sub-tab ── */}
+      {subTab === 'fields' && (
+        <Box direction="vertical" gap="18px">
+          <Box>
+            <Button onClick={handleSave} disabled={saving} size="small">
+              {saving ? 'Saving...' : 'Save Mappings'}
+            </Button>
+          </Box>
+          {MAPPING_FIELDS.map((field) => {
+            const mapping = mappings[field.key] ?? { type: 'default' as const };
+            return (
+              <Card key={field.key}>
+                <Card.Header title={field.label} subtitle={field.description} />
+                <Card.Divider />
+                <Card.Content>
+                  <Box gap="12px" verticalAlign="bottom">
+                    <Box width="200px">
+                      <FormField label="Mapping Type">
+                        <Dropdown
+                          size="small"
+                          options={TYPE_OPTIONS}
+                          selectedId={mapping.type ?? 'default'}
+                          onSelect={(option) =>
+                            updateMapping(field.key, { type: option.id as 'default' | 'customField' })
+                          }
+                        />
+                      </FormField>
+                    </Box>
+                    <Box>
+                      <FormField label={mapping.type === 'customField' ? 'Wix Field Key' : 'Default Value'}>
+                        <Input
+                          size="small"
+                          placeholder={field.placeholder}
+                          value={mapping.type === 'customField' ? mapping.wixField ?? '' : mapping.defaultValue ?? ''}
+                          onChange={(e) =>
+                            updateMapping(field.key, mapping.type === 'customField' ? { wixField: e.target.value } : { defaultValue: e.target.value })
+                          }
+                        />
+                      </FormField>
+                    </Box>
+                  </Box>
+                </Card.Content>
+              </Card>
+            );
+          })}
+        </Box>
+      )}
+
+      {/* ── Rules sub-tab ── */}
+      {subTab === 'rules' && (
+        <Box direction="vertical" gap="18px">
+          <Box>
+            <Button size="small" onClick={() => setShowRuleForm(!showRuleForm)}>
+              {showRuleForm ? 'Cancel' : 'Add Rule'}
+            </Button>
+          </Box>
+
+          {showRuleForm && (
+            <Card>
+              <Card.Header title="New Rule" />
+              <Card.Divider />
+              <Card.Content>
+                <Box direction="vertical" gap="12px">
+                  <Box gap="12px">
+                    <FormField label="Name">
+                      <Input size="small" value={newRule.name} onChange={(e) => setNewRule({ ...newRule, name: e.target.value })} placeholder="e.g., Prepend brand to title" />
+                    </FormField>
+                    <FormField label="Platform">
+                      <Dropdown size="small" options={PLATFORM_OPTIONS} selectedId={newRule.platform} onSelect={(o) => setNewRule({ ...newRule, platform: o.id as string })} />
+                    </FormField>
+                  </Box>
+                  <Box gap="12px">
+                    <FormField label="Target Field">
+                      <Input size="small" value={newRule.field} onChange={(e) => setNewRule({ ...newRule, field: e.target.value })} placeholder="e.g., title, description, price" />
+                    </FormField>
+                    <FormField label="Rule Type">
+                      <Dropdown size="small" options={RULE_TYPE_OPTIONS} selectedId={newRule.type} onSelect={(o) => setNewRule({ ...newRule, type: o.id as string })} />
+                    </FormField>
+                  </Box>
+                  {newRule.type === 'static' && (
+                    <FormField label="Value">
+                      <Input size="small" value={exprState.staticValue} onChange={(e) => setExprState({ ...exprState, staticValue: e.target.value })} placeholder="e.g., new" />
+                    </FormField>
+                  )}
+                  {newRule.type === 'concatenate' && (
+                    <FormField label="Expression (use {fieldName} for field references)">
+                      <Input size="small" value={exprState.concatValue} onChange={(e) => setExprState({ ...exprState, concatValue: e.target.value })} placeholder="e.g., {brand} - {title}" />
+                    </FormField>
+                  )}
+                  {newRule.type === 'calculator' && (
+                    <Box gap="12px">
+                      <FormField label="Source Field">
+                        <Input size="small" value={exprState.calcField} onChange={(e) => setExprState({ ...exprState, calcField: e.target.value })} placeholder="e.g., price" />
+                      </FormField>
+                      <FormField label="Operator">
+                        <Dropdown size="small" options={CALC_OPERATOR_OPTIONS} selectedId={exprState.calcOperator} onSelect={(o) => setExprState({ ...exprState, calcOperator: o.id as string })} />
+                      </FormField>
+                      <FormField label="Operand">
+                        <Input size="small" value={exprState.calcOperand} onChange={(e) => setExprState({ ...exprState, calcOperand: e.target.value })} placeholder="e.g., 1.2" />
+                      </FormField>
+                    </Box>
+                  )}
+                  <Button size="small" onClick={handleSaveRule} disabled={saving || !newRule.name || !newRule.field}>
+                    {saving ? 'Saving...' : 'Save Rule'}
+                  </Button>
                 </Box>
-                <Box>
-                  <FormField
-                    label={mapping.type === 'customField' ? 'Wix Field Key' : 'Default Value'}
-                  >
-                    <Input
-                      size="small"
-                      placeholder={field.placeholder}
-                      value={
-                        mapping.type === 'customField'
-                          ? mapping.wixField ?? ''
-                          : mapping.defaultValue ?? ''
-                      }
-                      onChange={(e) =>
-                        updateMapping(field.key, {
-                          ...(mapping.type === 'customField'
-                            ? { wixField: e.target.value }
-                            : { defaultValue: e.target.value }),
-                        })
-                      }
-                    />
-                  </FormField>
+              </Card.Content>
+            </Card>
+          )}
+
+          {rules.length === 0 && !showRuleForm && (
+            <Card>
+              <Card.Content>
+                <Text size="small" secondary>No rules configured. Rules transform product data before syncing (e.g., prepend brand to title, adjust prices).</Text>
+              </Card.Content>
+            </Card>
+          )}
+
+          {rules.map((rule) => (
+            <Card key={rule.id}>
+              <Card.Header
+                title={rule.name}
+                subtitle={`${rule.type} → ${rule.field} | Platform: ${rule.platform}`}
+                suffix={
+                  <Box gap="12px" verticalAlign="middle">
+                    <ToggleSwitch checked={rule.enabled} size="small" onChange={async () => {
+                      await appFetch('/api/rules', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...rule, enabled: !rule.enabled }),
+                      });
+                      await reloadRules();
+                    }} />
+                    <Button size="tiny" skin="destructive" onClick={() => rule.id && handleDeleteRule(rule.id)}>
+                      Delete
+                    </Button>
+                  </Box>
+                }
+              />
+            </Card>
+          ))}
+        </Box>
+      )}
+
+      {/* ── Filters sub-tab ── */}
+      {subTab === 'filters' && (
+        <Box direction="vertical" gap="18px">
+          <Box>
+            <Button size="small" onClick={() => setShowFilterForm(!showFilterForm)}>
+              {showFilterForm ? 'Cancel' : 'Add Filter'}
+            </Button>
+          </Box>
+
+          {showFilterForm && (
+            <Card>
+              <Card.Header title="New Filter" />
+              <Card.Divider />
+              <Card.Content>
+                <Box direction="vertical" gap="12px">
+                  <Box gap="12px">
+                    <FormField label="Name">
+                      <Input size="small" value={newFilter.name} onChange={(e) => setNewFilter({ ...newFilter, name: e.target.value })} placeholder="e.g., Exclude out of stock" />
+                    </FormField>
+                    <FormField label="Platform">
+                      <Dropdown size="small" options={PLATFORM_OPTIONS} selectedId={newFilter.platform} onSelect={(o) => setNewFilter({ ...newFilter, platform: o.id as string })} />
+                    </FormField>
+                  </Box>
+                  <Box gap="12px">
+                    <FormField label="Field (dot-path)">
+                      <Input size="small" value={newFilter.field} onChange={(e) => setNewFilter({ ...newFilter, field: e.target.value })} placeholder="e.g., inventory.availabilityStatus" />
+                    </FormField>
+                    <FormField label="Operator">
+                      <Dropdown size="small" options={OPERATOR_OPTIONS} selectedId={newFilter.operator} onSelect={(o) => setNewFilter({ ...newFilter, operator: o.id as string })} />
+                    </FormField>
+                  </Box>
+                  <Box gap="12px">
+                    <FormField label="Value">
+                      <Input size="small" value={newFilter.value} onChange={(e) => setNewFilter({ ...newFilter, value: e.target.value })} placeholder="e.g., OUT_OF_STOCK" />
+                    </FormField>
+                    <FormField label="Condition Group">
+                      <Dropdown size="small" options={CONDITION_GROUP_OPTIONS} selectedId={newFilter.conditionGroup} onSelect={(o) => setNewFilter({ ...newFilter, conditionGroup: o.id as string })} />
+                    </FormField>
+                  </Box>
+                  <Button size="small" onClick={handleSaveFilter} disabled={saving || !newFilter.name || !newFilter.field}>
+                    {saving ? 'Saving...' : 'Save Filter'}
+                  </Button>
                 </Box>
-              </Box>
-            </Card.Content>
-          </Card>
-        );
-      })}
+              </Card.Content>
+            </Card>
+          )}
+
+          {filters.length === 0 && !showFilterForm && (
+            <Card>
+              <Card.Content>
+                <Text size="small" secondary>No filters configured. Filters exclude products from sync (e.g., hide out-of-stock, skip products under $5).</Text>
+              </Card.Content>
+            </Card>
+          )}
+
+          {filters.map((filter) => (
+            <Card key={filter.id}>
+              <Card.Header
+                title={filter.name}
+                subtitle={`${filter.field} ${filter.operator} "${filter.value}" (${filter.conditionGroup}) | Platform: ${filter.platform}`}
+                suffix={
+                  <Box gap="12px" verticalAlign="middle">
+                    <ToggleSwitch checked={filter.enabled} size="small" onChange={async () => {
+                      await appFetch('/api/filters', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ...filter, enabled: !filter.enabled }),
+                      });
+                      await reloadFilters();
+                    }} />
+                    <Button size="tiny" skin="destructive" onClick={() => filter.id && handleDeleteFilter(filter.id)}>
+                      Delete
+                    </Button>
+                  </Box>
+                }
+              />
+            </Card>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 };
@@ -488,8 +841,18 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
   const [localConfig, setLocalConfig] = useState(config);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhancedCount, setEnhancedCount] = useState(0);
+  const [aiStyle, setAiStyle] = useState(config?.aiEnhancementStyle ?? '');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    appFetch('/api/enhance?instanceId=default')
+      .then((r) => r.json())
+      .then((data) => setEnhancedCount(data.enhancedCount ?? 0))
+      .catch(() => {});
+  }, []);
 
   const handleToggleSync = useCallback(async () => {
     if (!localConfig) return;
@@ -508,6 +871,54 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
       setSaving(false);
     }
   }, [localConfig, onRefresh]);
+
+  const handleToggleAi = useCallback(async () => {
+    if (!localConfig) return;
+    const newValue = !(localConfig as any).aiEnhancementEnabled;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await saveAppConfig({ aiEnhancementEnabled: newValue });
+      setLocalConfig((prev) => prev ? { ...prev, aiEnhancementEnabled: newValue } as any : prev);
+      setSuccess(newValue ? 'AI enhancement enabled.' : 'AI enhancement disabled.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update');
+    } finally {
+      setSaving(false);
+    }
+  }, [localConfig]);
+
+  const handleSaveAiStyle = useCallback(async () => {
+    setSaving(true);
+    try {
+      await saveAppConfig({ aiEnhancementStyle: aiStyle });
+    } catch {
+      // silent
+    } finally {
+      setSaving(false);
+    }
+  }, [aiStyle]);
+
+  const handleEnhanceAll = useCallback(async () => {
+    setEnhancing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await appFetch('/api/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default' }),
+      });
+      const data = await response.json();
+      setEnhancedCount(data.enhanced ?? 0);
+      setSuccess(`Enhanced ${data.enhanced} of ${data.total} products.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enhancement failed');
+    } finally {
+      setEnhancing(false);
+    }
+  }, []);
 
   const handleFullSync = useCallback(async () => {
     setSyncing(true);
@@ -564,6 +975,44 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
               <Text size="small" skin={localConfig?.metaConnected ? 'success' : 'error'}>
                 {localConfig?.metaConnected ? 'Connected' : 'Not Connected'}
               </Text>
+            </Box>
+          </Box>
+        </Card.Content>
+      </Card>
+
+      <Card>
+        <Card.Header
+          title="AI Description Enhancement"
+          subtitle="Use Claude AI to optimize product descriptions for search engines"
+        />
+        <Card.Divider />
+        <Card.Content>
+          <Box direction="vertical" gap="12px">
+            <Box verticalAlign="middle" gap="12px">
+              <ToggleSwitch
+                checked={(localConfig as any)?.aiEnhancementEnabled ?? false}
+                onChange={handleToggleAi}
+                disabled={saving}
+                size="small"
+              />
+              <Text size="small">
+                {(localConfig as any)?.aiEnhancementEnabled ? 'Enabled' : 'Disabled'}
+              </Text>
+            </Box>
+            <FormField label="Style / Tone (optional)">
+              <Input
+                size="small"
+                value={aiStyle}
+                onChange={(e) => setAiStyle(e.target.value)}
+                onBlur={handleSaveAiStyle}
+                placeholder="e.g., professional and concise"
+              />
+            </FormField>
+            <Box verticalAlign="middle" gap="12px">
+              <Button size="small" onClick={handleEnhanceAll} disabled={enhancing}>
+                {enhancing ? 'Enhancing...' : 'Enhance All Descriptions'}
+              </Button>
+              <Text size="small" secondary>{enhancedCount} products enhanced</Text>
             </Box>
           </Box>
         </Card.Content>
