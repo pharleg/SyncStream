@@ -3,6 +3,8 @@ import {
   Box,
   Button,
   Card,
+  FormField,
+  Input,
   Page,
   Text,
   ToggleSwitch,
@@ -18,6 +20,8 @@ interface AppConfig {
   metaConnected: boolean;
   syncEnabled: boolean;
   lastFullSync: string | null;
+  aiEnhancementEnabled: boolean;
+  aiEnhancementStyle: string;
 }
 
 async function fetchConfig(): Promise<AppConfig | null> {
@@ -55,12 +59,17 @@ const SettingsPage: FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhancedCount, setEnhancedCount] = useState(0);
 
   useEffect(() => {
-    fetchConfig()
-      .then(setConfig)
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    Promise.all([
+      fetchConfig().then(setConfig).catch(() => {}),
+      fetch('/api/enhance?instanceId=default')
+        .then((r) => (r.ok ? r.json() : { enhancedCount: 0 }))
+        .then((data: { enhancedCount: number }) => setEnhancedCount(data.enhancedCount))
+        .catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
 
   const handleToggleSync = useCallback(async () => {
@@ -93,6 +102,62 @@ const SettingsPage: FC = () => {
       setSyncing(false);
     }
   }, []);
+
+  const handleToggleAiEnhancement = useCallback(async () => {
+    if (!config) return;
+    const newValue = !config.aiEnhancementEnabled;
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      await updateConfig({ aiEnhancementEnabled: newValue });
+      setConfig((prev) => prev ? { ...prev, aiEnhancementEnabled: newValue } : prev);
+      setSuccess(newValue ? 'AI enhancement enabled.' : 'AI enhancement disabled.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update');
+    } finally {
+      setSaving(false);
+    }
+  }, [config]);
+
+  const handleAiStyleChange = useCallback(async (value: string) => {
+    if (!config) return;
+    setConfig((prev) => prev ? { ...prev, aiEnhancementStyle: value } : prev);
+  }, [config]);
+
+  const handleAiStyleBlur = useCallback(async () => {
+    if (!config) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateConfig({ aiEnhancementStyle: config.aiEnhancementStyle });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save style');
+    } finally {
+      setSaving(false);
+    }
+  }, [config]);
+
+  const handleEnhanceAll = useCallback(async () => {
+    setEnhancing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await fetch('/api/enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default' }),
+      });
+      if (!response.ok) throw new Error('Enhancement failed');
+      const result = await response.json();
+      setEnhancedCount(result.enhancedCount ?? enhancedCount);
+      setSuccess(`AI enhancement complete: ${result.enhanced ?? 0} descriptions enhanced.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enhancement failed');
+    } finally {
+      setEnhancing(false);
+    }
+  }, [enhancedCount]);
 
   if (loading) {
     return (
@@ -149,6 +214,51 @@ const SettingsPage: FC = () => {
                     <Text weight="bold" size="small">Meta Product Catalog:</Text>
                     <Text size="small" skin={config?.metaConnected ? 'success' : 'error'}>
                       {config?.metaConnected ? 'Connected' : 'Not Connected'}
+                    </Text>
+                  </Box>
+                </Box>
+              </Card.Content>
+            </Card>
+
+            <Card>
+              <Card.Header
+                title="AI Description Enhancement"
+                subtitle="Use Claude AI to optimize product descriptions for search engines"
+              />
+              <Card.Divider />
+              <Card.Content>
+                <Box direction="vertical" gap="18px">
+                  <Box verticalAlign="middle" gap="12px">
+                    <ToggleSwitch
+                      checked={config?.aiEnhancementEnabled ?? false}
+                      onChange={handleToggleAiEnhancement}
+                      disabled={saving}
+                    />
+                    <Text size="small">
+                      {config?.aiEnhancementEnabled ? 'Enabled' : 'Disabled'}
+                    </Text>
+                  </Box>
+                  <FormField label="Style / Tone (optional)">
+                    <Input
+                      value={config?.aiEnhancementStyle ?? ''}
+                      onChange={(e) => handleAiStyleChange(e.target.value)}
+                      onBlur={handleAiStyleBlur}
+                      placeholder="e.g. professional and concise"
+                      disabled={!config?.aiEnhancementEnabled}
+                    />
+                  </FormField>
+                  <Box verticalAlign="middle" gap="12px">
+                    <Button
+                      onClick={handleEnhanceAll}
+                      disabled={enhancing || !config?.aiEnhancementEnabled}
+                      size="small"
+                    >
+                      {enhancing ? 'Enhancing...' : 'Enhance All Descriptions'}
+                    </Button>
+                    <Text size="tiny" secondary>
+                      {enhancedCount > 0
+                        ? `${enhancedCount} product${enhancedCount === 1 ? '' : 's'} enhanced`
+                        : 'No products enhanced yet'}
                     </Text>
                   </Box>
                 </Box>
