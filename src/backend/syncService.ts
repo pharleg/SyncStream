@@ -2,8 +2,7 @@
  * syncService.ts
  *
  * Central orchestrator for product sync operations.
- * Calls productMapper, validator, gmcClient, and metaClient.
- * Nothing else should call those modules directly.
+ * Pipeline: fetch → filter → flatten → enhance → map → rules → validate → push → write state
  */
 
 import type {
@@ -12,10 +11,13 @@ import type {
   SyncResult,
 } from '../types/sync.types';
 import type { WixProduct, SyncState } from '../types/wix.types';
-import type { GmcProductInput, GmcInsertResult } from '../types/gmc.types';
-import { mapToGmc } from './productMapper';
+import type { GmcProductInput } from '../types/gmc.types';
+import { flattenVariants, mapFlattenedToGmc } from './productMapper';
 import { validateGmc } from './validator';
 import { batchInsertProducts } from './gmcClient';
+import { applyFilters } from './filterEngine';
+import { applyRules } from './rulesEngine';
+import { enhanceProducts } from './aiEnhancer';
 import {
   getValidGmcAccessToken,
   getGmcTokens,
@@ -23,6 +25,8 @@ import {
 import {
   getAppConfig,
   bulkUpsertSyncStates,
+  getRules,
+  getFilters,
 } from './dataService';
 
 /**
@@ -125,12 +129,13 @@ export async function runFullSync(
     throw new Error('App not configured. Please complete setup first.');
   }
 
+  // 1. Fetch products
   const allProducts = options.productIds
     ? await fetchProductsByIds(options.productIds)
     : await fetchAllProducts();
 
   // Cloudflare Workers has a 50 subrequest limit.
-  // Process max 10 products per invocation to stay within limits.
+  // Process max 5 products per invocation to stay within limits.
   const MAX_PRODUCTS_PER_SYNC = 5;
   const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
 
@@ -145,37 +150,53 @@ export async function runFullSync(
 
     const accessToken = await getValidGmcAccessToken(instanceId);
     const tokens = await getGmcTokens(instanceId);
+    const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
 
-    // Map and validate all products
+    // 2. Apply filters
+    const filters = await getFilters(instanceId, 'gmc');
+    const filtered = applyFilters(products, filters, 'gmc');
+
+    // 3. Flatten variants
+    const flattened = filtered.flatMap((p) => flattenVariants(p));
+
+    // 4. AI enhance (if enabled)
+    let enhancedMap: Map<string, { title: string; description: string }> | undefined;
+    if (config.aiEnhancementEnabled) {
+      // Enhance at product level (not variant level) to avoid duplicate API calls
+      const uniqueProducts = [...new Map(filtered.map((p) => [p._id ?? p.id, p])).values()];
+      enhancedMap = await enhanceProducts(uniqueProducts, instanceId, config.aiEnhancementStyle);
+    }
+
+    // 5. Map to GMC format + 6. Apply rules
+    const rules = await getRules(instanceId, 'gmc');
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
 
-    for (const product of products) {
-      const gmcProducts = mapToGmc(
-        product,
-        config.fieldMappings,
-        config.fieldMappings['siteUrl']?.defaultValue ?? '',
-      );
+    for (const item of flattened) {
+      const productId = item.product._id ?? item.product.id;
+      const enhanced = enhancedMap?.get(productId);
 
-      for (const gmcProduct of gmcProducts) {
-        const errors = validateGmc(gmcProduct, gmcProduct.offerId);
+      const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
 
-        if (errors.length > 0) {
-          validationFailures.push({
-            productId: gmcProduct.offerId,
-            platform: 'gmc',
-            success: false,
-            errors,
-          });
-        } else {
-          validProducts.push(gmcProduct);
-        }
+      // Apply rules then validate
+      const transformed = applyRules([gmcProduct], rules, 'gmc');
+      const errors = validateGmc(transformed[0], transformed[0].offerId);
+
+      if (errors.length > 0) {
+        validationFailures.push({
+          productId: transformed[0].offerId,
+          platform: 'gmc',
+          success: false,
+          errors,
+        });
+      } else {
+        validProducts.push(transformed[0]);
       }
     }
 
     results.push(...validationFailures);
 
-    // Push valid products via custombatch
+    // 7. Push valid products
     if (validProducts.length > 0) {
       const batchResults = await batchInsertProducts(
         tokens.merchantId,
@@ -209,7 +230,7 @@ export async function runFullSync(
     }
   }
 
-  // Write SyncState records
+  // 8. Write SyncState records
   const syncStates: SyncState[] = results.map((r) => ({
     productId: r.productId,
     platform: r.platform,
