@@ -98,6 +98,10 @@ export interface AppConfig {
   lastFullSync: Date | null;
   /** Merchant API data source ID for product uploads. */
   gmcDataSourceId?: string;
+  /** Whether AI description enhancement is enabled. */
+  aiEnhancementEnabled?: boolean;
+  /** Optional style/tone instructions for AI enhancement. */
+  aiEnhancementStyle?: string;
 }
 
 /** Flexible field-mapping model.
@@ -128,4 +132,13 @@ export interface ValidationError {
   platform: 'gmc' | 'meta';
   message: string;
   productId: string;
+}
+
+/** A product flattened to a single variant for pipeline processing. */
+export interface FlattenedProduct {
+  product: WixProduct;
+  variant?: WixVariant;
+  parentId: string;
+  itemId: string;
+  isMultiVariant: boolean;
 }
