@@ -9,6 +9,7 @@ import type {
   WixProduct,
   WixVariant,
   FieldMappings,
+  FlattenedProduct,
 } from '../types/wix.types';
 import type {
   GmcProductInput,
@@ -153,13 +154,17 @@ function getAdditionalImageLinks(product: WixProduct): string[] {
     .slice(0, 10);
 }
 
-/** Extract color and size from variant choices. */
+/** Extract color, size, material, and pattern from variant choices. */
 function extractChoiceValues(variant: WixVariant): {
   color?: string;
   size?: string;
+  material?: string;
+  pattern?: string;
 } {
   let color: string | undefined;
   let size: string | undefined;
+  let material: string | undefined;
+  let pattern: string | undefined;
 
   for (const choice of variant.choices) {
     const optionName =
@@ -170,10 +175,14 @@ function extractChoiceValues(variant: WixVariant): {
       color = choiceName;
     } else if (optionName.includes('size') && choiceName) {
       size = choiceName;
+    } else if (optionName.includes('material') && choiceName) {
+      material = choiceName;
+    } else if (optionName.includes('pattern') && choiceName) {
+      pattern = choiceName;
     }
   }
 
-  return { color, size };
+  return { color, size, material, pattern };
 }
 
 /** Build the product page URL. */
@@ -190,8 +199,109 @@ function buildProductLink(product: WixProduct, siteUrl: string): string {
 }
 
 /**
+ * Flatten a WixProduct into one FlattenedProduct per variant.
+ * Single-variant products return one item.
+ * Multi-variant products return one item per variant.
+ */
+export function flattenVariants(product: WixProduct): FlattenedProduct[] {
+  const parentId = product._id ?? product.id;
+  const variants = product.variantsInfo?.variants ?? [];
+
+  if (variants.length <= 1) {
+    return [{
+      product,
+      variant: variants[0],
+      parentId,
+      itemId: variants[0]?._id ?? variants[0]?.id ?? parentId,
+      isMultiVariant: false,
+    }];
+  }
+
+  return variants.map((variant) => ({
+    product,
+    variant,
+    parentId,
+    itemId: variant._id ?? variant.id,
+    isMultiVariant: true,
+  }));
+}
+
+/**
+ * Map a FlattenedProduct to a GmcProductInput.
+ * New pipeline entry point — works on pre-flattened items.
+ * Enhanced title/description can override the product's originals.
+ */
+export function mapFlattenedToGmc(
+  item: FlattenedProduct,
+  mappings: FieldMappings,
+  siteUrl: string,
+  enhanced?: { title?: string; description?: string },
+): GmcProductInput {
+  const { product, variant, isMultiVariant } = item;
+
+  const rawDesc = enhanced?.description ?? product.plainDescription ?? product.description ?? '';
+  const description = truncate(stripHtml(rawDesc), 5000) || product.name;
+  const title = enhanced?.title ?? product.name;
+  const brand =
+    product.brand?.name ??
+    resolveMappedField(product, 'brand', mappings) ??
+    '';
+  const condition = (
+    resolveMappedField(product, 'condition', mappings)?.toUpperCase() as
+      | GmcProductAttributes['condition']
+      | undefined
+  ) ?? 'NEW';
+  const gtin = resolveMappedField(product, 'gtin', mappings);
+  const mpn = resolveMappedField(product, 'mpn', mappings);
+  const googleProductCategory = resolveMappedField(product, 'googleProductCategory', mappings);
+  const additionalImageLinks = getAdditionalImageLinks(product);
+  const price = extractPrice(product, variant);
+
+  let availability: GmcProductAttributes['availability'];
+  if (variant) {
+    availability = variant.inventoryStatus?.inStock !== false ? 'IN_STOCK' : 'OUT_OF_STOCK';
+  } else {
+    availability = product.inventory?.availabilityStatus === 'OUT_OF_STOCK' ? 'OUT_OF_STOCK' : 'IN_STOCK';
+  }
+
+  const productAttributes: GmcProductAttributes = {
+    title,
+    description,
+    link: buildProductLink(product, siteUrl),
+    imageLink: getImageLink(product, variant),
+    availability,
+    price,
+    brand,
+    condition,
+  };
+
+  if (isMultiVariant && variant) {
+    productAttributes.itemGroupId = item.parentId;
+    const { color, size, material, pattern } = extractChoiceValues(variant);
+    if (color) productAttributes.color = color;
+    if (size) productAttributes.size = size;
+    // material and pattern are extracted but GMC doesn't have dedicated fields for them
+    // They can be added via custom attributes in a future update
+  }
+
+  if (gtin) productAttributes.gtins = [gtin];
+  if (mpn) productAttributes.mpn = mpn;
+  if (!gtin && !mpn) productAttributes.identifierExists = false;
+  if (googleProductCategory) productAttributes.googleProductCategory = googleProductCategory;
+  if (additionalImageLinks.length > 0) productAttributes.additionalImageLinks = additionalImageLinks;
+
+  return {
+    offerId: item.itemId,
+    contentLanguage: 'en',
+    feedLabel: 'US',
+    productAttributes,
+  };
+}
+
+/**
  * Map a Wix product to one or more GMC ProductInput objects (Merchant API v1).
  * Multi-variant products expand to one row per variant.
+ * @deprecated Use flattenVariants + mapFlattenedToGmc for the new pipeline.
  */
 export function mapToGmc(
   product: WixProduct,
