@@ -118,12 +118,20 @@ brand, gtin, and mpn don't exist as native Wix fields. The Mapping UI
 Design the data model in Phase 1 to accommodate this -- fieldMappings
 in AppConfig should be flexible enough to hold both types.
 
+## Secrets Manager Keys
+All secrets stored in Wix Secrets Manager:
+- gmc_access_token_{instanceId} -- GMC OAuth access token
+- gmc_refresh_token_{instanceId} -- GMC OAuth refresh token
+- meta_access_token_{instanceId} -- Meta OAuth access token
+- meta_refresh_token_{instanceId} -- Meta OAuth refresh token
+- supabase_project_url -- Supabase project URL
+- supabase_service_role -- Supabase service role key
+- anthropic_api_key -- Anthropic Claude API key (for AI description enhancement)
+
 ## OAuth Flow
 Connect page triggers OAuth for each platform. Backend exchanges auth
 code for access + refresh tokens. Tokens stored in Secrets Manager
-under namespaced keys: gmc_access_token_{instanceId},
-gmc_refresh_token_{instanceId}, meta_access_token_{instanceId},
-meta_refresh_token_{instanceId}.
+under namespaced keys (see above).
 All API calls use stored refresh token to get short-lived access tokens.
 
 ## Build Phases
