@@ -17,7 +17,8 @@ import type { Platform } from '../types/sync.types';
 
 /** Read a field value from GmcProductAttributes by name. */
 function readField(attrs: GmcProductAttributes, field: string): string {
-  const value = (attrs as Record<string, unknown>)[field];
+  const record = attrs as unknown as Record<string, unknown>;
+  const value = record[field];
   if (value == null) return '';
   if (typeof value === 'object' && 'amountMicros' in (value as Record<string, unknown>)) {
     const micros = Number((value as { amountMicros: string }).amountMicros);
@@ -28,17 +29,18 @@ function readField(attrs: GmcProductAttributes, field: string): string {
 
 /** Write a field value to GmcProductAttributes by name. */
 function writeField(attrs: GmcProductAttributes, field: string, value: string): void {
+  const record = attrs as unknown as Record<string, unknown>;
   if (field === 'price' || field === 'salePrice') {
     const num = parseFloat(value);
     if (!isNaN(num)) {
-      (attrs as Record<string, unknown>)[field] = {
+      record[field] = {
         amountMicros: String(Math.round(num * 1_000_000)),
         currencyCode: attrs.price.currencyCode,
       };
     }
     return;
   }
-  (attrs as Record<string, unknown>)[field] = value;
+  record[field] = value;
 }
 
 /** Apply a concatenate rule. */
