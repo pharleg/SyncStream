@@ -30,71 +30,85 @@ import {
   getCachedProductsByIds,
 } from './dataService';
 
+/** Run async tasks with a concurrency limit. */
+async function withConcurrency<T>(
+  limit: number,
+  tasks: (() => Promise<T>)[],
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex++;
+      try {
+        const value = await tasks[index]();
+        results[index] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
 /**
  * Fetch all products from the Wix store.
  * Uses the Wix SDK catalogV3 API with cursor pagination.
- * Each product requires a second getProduct call for variant data.
+ * Phase 1: query all products, collect multi-variant IDs.
+ * Phase 2: batch-fetch multi-variant details with concurrency(5).
  */
 async function fetchAllProducts(): Promise<WixProduct[]> {
   const { productsV3 } = await import('@wix/stores');
-  const products: WixProduct[] = [];
+  const singleVariantProducts: WixProduct[] = [];
+  const multiVariantIds: string[] = [];
   let cursor: string | undefined;
 
+  // Phase 1: Query all products, collect multi-variant IDs
   do {
     const response = await productsV3.queryProducts(
-      {
-        cursorPaging: { limit: 100, cursor },
-      },
+      { cursorPaging: { limit: 100, cursor } },
       {
         fields: [
-          'URL',
-          'CURRENCY',
-          'PLAIN_DESCRIPTION',
-          'MEDIA_ITEMS_INFO',
-          'VARIANT_OPTION_CHOICE_NAMES',
+          'URL', 'CURRENCY', 'PLAIN_DESCRIPTION',
+          'MEDIA_ITEMS_INFO', 'VARIANT_OPTION_CHOICE_NAMES',
         ],
       },
     );
 
-    // Use query results directly for products with 0-1 variants.
-    // Only call getProduct for multi-variant products that need variant detail.
     for (const p of response.products ?? []) {
       const product = p as any;
       const variantCount = product.variantSummary?.variantCount ?? 1;
-
       if (variantCount > 1) {
-        // Multi-variant: need getProduct for variantsInfo
-        try {
-          const fullProduct = await productsV3.getProduct(
-            product._id ?? product.id,
-            {
-              fields: [
-                'URL',
-                'CURRENCY',
-                'PLAIN_DESCRIPTION',
-                'MEDIA_ITEMS_INFO',
-                'VARIANT_OPTION_CHOICE_NAMES',
-              ],
-            },
-          );
-          if (fullProduct) {
-            products.push(fullProduct as unknown as WixProduct);
-          }
-        } catch {
-          // Fall back to query result if getProduct fails
-          products.push(product as unknown as WixProduct);
-        }
+        multiVariantIds.push(product._id ?? product.id);
       } else {
-        // Single variant: query result has everything we need
-        products.push(product as unknown as WixProduct);
+        singleVariantProducts.push(product as unknown as WixProduct);
       }
     }
 
-    cursor =
-      (response.pagingMetadata as any)?.cursors?.next ?? undefined;
+    cursor = (response.pagingMetadata as any)?.cursors?.next ?? undefined;
   } while (cursor);
 
-  return products;
+  // Phase 2: Batch-fetch multi-variant products with concurrency(5)
+  const fetchTasks = multiVariantIds.map((id) => async () => {
+    const fullProduct = await productsV3.getProduct(id, {
+      fields: [
+        'URL', 'CURRENCY', 'PLAIN_DESCRIPTION',
+        'MEDIA_ITEMS_INFO', 'VARIANT_OPTION_CHOICE_NAMES',
+      ],
+    });
+    return fullProduct as unknown as WixProduct;
+  });
+
+  const settled = await withConcurrency(5, fetchTasks);
+  const multiVariantProducts = settled
+    .filter((r): r is PromiseFulfilledResult<WixProduct> => r.status === 'fulfilled')
+    .map((r) => r.value);
+
+  return [...singleVariantProducts, ...multiVariantProducts];
 }
 
 async function fetchProductsByIds(
@@ -137,7 +151,7 @@ export async function runFullSync(
 
   // Cloudflare Workers has a 50 subrequest limit.
   // Process max 5 products per invocation to stay within limits.
-  const MAX_PRODUCTS_PER_SYNC = 5;
+  const MAX_PRODUCTS_PER_SYNC = 15;
   const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
 
   const results: SyncResult[] = [];
