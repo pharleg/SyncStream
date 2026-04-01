@@ -700,7 +700,404 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
   );
 };
 
-// ─── Status Tab ──────────────────────────────────────────────────────────
+// ─── Products Tab (Workbench) ────────────────────────────────────────────
+
+interface CachedProductRow {
+  productId: string;
+  name: string;
+  imageUrl?: string;
+  price?: string;
+  currency: string;
+  availability?: string;
+  variantCount: number;
+  description?: string;
+  plainDescription?: string;
+  brand?: string;
+  syncStatus: { status: string; lastSynced: string } | null;
+  enhancedDescription: string | null;
+  enhancedTitle: string | null;
+}
+
+const FILTER_FIELD_OPTIONS = [
+  { id: 'name', value: 'Name' },
+  { id: 'price', value: 'Price' },
+  { id: 'availability', value: 'Availability' },
+  { id: 'brand', value: 'Brand' },
+  { id: 'variantCount', value: 'Variants' },
+];
+
+const FILTER_OP_OPTIONS = [
+  { id: 'equals', value: 'Equals' },
+  { id: 'not_equals', value: 'Not Equals' },
+  { id: 'contains', value: 'Contains' },
+  { id: 'greater_than', value: 'Greater Than' },
+  { id: 'less_than', value: 'Less Than' },
+];
+
+function applyClientFilter(
+  products: CachedProductRow[],
+  field: string,
+  operator: string,
+  value: string,
+): CachedProductRow[] {
+  return products.filter((p) => {
+    const fieldValue = String((p as any)[field] ?? '');
+    const numField = Number(fieldValue);
+    const numValue = Number(value);
+    switch (operator) {
+      case 'equals': return fieldValue === value;
+      case 'not_equals': return fieldValue !== value;
+      case 'contains': return fieldValue.toLowerCase().includes(value.toLowerCase());
+      case 'greater_than': return !isNaN(numField) && !isNaN(numValue) && numField > numValue;
+      case 'less_than': return !isNaN(numField) && !isNaN(numValue) && numField < numValue;
+      default: return true;
+    }
+  });
+}
+
+const ProductsTab: FC = () => {
+  const [products, setProducts] = useState<CachedProductRow[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<CachedProductRow[]>([]);
+  const [cachedAt, setCachedAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [pulling, setPulling] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [enhancing, setEnhancing] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+
+  const [filterField, setFilterField] = useState('name');
+  const [filterOperator, setFilterOperator] = useState('contains');
+  const [filterValue, setFilterValue] = useState('');
+  const [activeFilter, setActiveFilter] = useState<{ field: string; operator: string; value: string } | null>(null);
+
+  const [previewData, setPreviewData] = useState<Map<string, any> | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+
+  const loadProducts = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await appFetch('/api/products?instanceId=default');
+      const data = await response.json();
+      setProducts(data.products ?? []);
+      setFilteredProducts(data.products ?? []);
+      setCachedAt(data.cachedAt);
+    } catch { /* empty cache */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  const handlePull = useCallback(async () => {
+    setPulling(true); setError(null); setSuccess(null);
+    try {
+      const response = await appFetch('/api/products-pull', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default' }),
+      });
+      const data = await response.json();
+      setSuccess(`Pulled ${data.count} products from your store.`);
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pull products');
+    } finally { setPulling(false); }
+  }, [loadProducts]);
+
+  const handlePreviewFilter = useCallback(() => {
+    if (!filterValue.trim()) { setFilteredProducts(products); setActiveFilter(null); return; }
+    const result = applyClientFilter(products, filterField, filterOperator, filterValue);
+    setFilteredProducts(result);
+    setActiveFilter({ field: filterField, operator: filterOperator, value: filterValue });
+  }, [products, filterField, filterOperator, filterValue]);
+
+  const handleClearFilter = useCallback(() => {
+    setFilteredProducts(products); setActiveFilter(null); setFilterValue('');
+  }, [products]);
+
+  const handlePinFilter = useCallback(async () => {
+    if (!activeFilter) return;
+    try {
+      await appFetch('/api/filters', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceId: 'default',
+          name: `${activeFilter.field} ${activeFilter.operator} "${activeFilter.value}"`,
+          platform: 'both', field: activeFilter.field,
+          operator: activeFilter.operator, value: activeFilter.value,
+          conditionGroup: 'AND', order: 0, enabled: true,
+        }),
+      });
+      setSuccess('Filter pinned — it will apply during sync.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to pin filter');
+    }
+  }, [activeFilter]);
+
+  const handlePreviewRules = useCallback(async () => {
+    if (previewData) { setPreviewData(null); return; }
+    setPreviewing(true); setError(null);
+    try {
+      const ids = filteredProducts.map((p) => p.productId);
+      const response = await appFetch('/api/products-preview-rules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: ids }),
+      });
+      const data = await response.json();
+      const map = new Map<string, any>();
+      for (const p of data.previews ?? []) map.set(p.productId, p);
+      setPreviewData(map);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to preview rules');
+    } finally { setPreviewing(false); }
+  }, [filteredProducts, previewData]);
+
+  const handleEnhanceOne = useCallback(async (productId: string) => {
+    setEnhancing(productId); setError(null);
+    try {
+      await appFetch('/api/products-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productId }),
+      });
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Enhancement failed');
+    } finally { setEnhancing(null); }
+  }, [loadProducts]);
+
+  const handleEnhanceBulk = useCallback(async () => {
+    if (selected.size === 0) return;
+    setEnhancing('bulk'); setError(null);
+    try {
+      const response = await appFetch('/api/products-enhance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: Array.from(selected) }),
+      });
+      const data = await response.json();
+      setSuccess(`Enhanced ${data.count} products.`);
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Bulk enhancement failed');
+    } finally { setEnhancing(null); }
+  }, [selected, loadProducts]);
+
+  const handleSyncProducts = useCallback(async () => {
+    const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
+    if (ids.length === 0) return;
+    setSyncing(true); setError(null); setSuccess(null);
+    try {
+      const response = await appFetch('/api/products-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: ids, platforms: ['gmc'] }),
+      });
+      const data = await response.json();
+      setSuccess(`Sync complete: ${data.synced} synced, ${data.failed} failed out of ${data.total}.`);
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Sync failed');
+    } finally { setSyncing(false); }
+  }, [selected, filteredProducts, loadProducts]);
+
+  const toggleSelect = useCallback((productId: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(productId)) next.delete(productId); else next.add(productId);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAll = useCallback(() => {
+    if (selected.size === filteredProducts.length) setSelected(new Set());
+    else setSelected(new Set(filteredProducts.map((p) => p.productId)));
+  }, [selected, filteredProducts]);
+
+  if (loading) return <Box align="center" padding="60px"><Loader /></Box>;
+
+  return (
+    <Box direction="vertical" gap="18px">
+      {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
+      {success && <SectionHelper appearance="success">{success}</SectionHelper>}
+
+      {/* Toolbar */}
+      <Box gap="12px" verticalAlign="middle">
+        <Button size="small" onClick={handlePull} disabled={pulling}>
+          {pulling ? 'Pulling...' : 'Pull Products'}
+        </Button>
+        {cachedAt && <Text size="tiny" secondary>Last refreshed: {new Date(cachedAt).toLocaleString()}</Text>}
+        <Box marginLeft="auto" gap="12px">
+          {selected.size > 0 && (
+            <Button size="small" onClick={handleEnhanceBulk} disabled={enhancing === 'bulk'}>
+              {enhancing === 'bulk' ? 'Enhancing...' : `Generate AI (${selected.size})`}
+            </Button>
+          )}
+          <Button size="small" onClick={handlePreviewRules} disabled={previewing || products.length === 0}>
+            {previewing ? 'Loading...' : previewData ? 'Clear Preview' : 'Preview Rules'}
+          </Button>
+          <Button size="small" skin="dark" onClick={handleSyncProducts} disabled={syncing || products.length === 0}>
+            {syncing ? 'Syncing...' : `Sync ${selected.size > 0 ? selected.size : filteredProducts.length} Products`}
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Filter bar */}
+      <Card>
+        <Card.Content>
+          <Box gap="12px" verticalAlign="bottom">
+            <Box width="150px">
+              <FormField label="Field">
+                <Dropdown size="small" options={FILTER_FIELD_OPTIONS} selectedId={filterField} onSelect={(o) => setFilterField(o.id as string)} />
+              </FormField>
+            </Box>
+            <Box width="150px">
+              <FormField label="Operator">
+                <Dropdown size="small" options={FILTER_OP_OPTIONS} selectedId={filterOperator} onSelect={(o) => setFilterOperator(o.id as string)} />
+              </FormField>
+            </Box>
+            <Box width="200px">
+              <FormField label="Value">
+                <Input size="small" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder="Filter value..." />
+              </FormField>
+            </Box>
+            <Button size="small" onClick={handlePreviewFilter}>Preview</Button>
+            {activeFilter && (
+              <>
+                <Button size="small" skin="light" onClick={handlePinFilter}>Pin Filter</Button>
+                <Button size="small" skin="light" onClick={handleClearFilter}>Clear</Button>
+              </>
+            )}
+          </Box>
+          {activeFilter && (
+            <Box marginTop="6px">
+              <Badge size="small" skin="general">{activeFilter.field} {activeFilter.operator} &quot;{activeFilter.value}&quot;</Badge>
+            </Box>
+          )}
+        </Card.Content>
+      </Card>
+
+      {/* Empty state */}
+      {products.length === 0 && (
+        <Card>
+          <Card.Content>
+            <Box direction="vertical" align="center" padding="48px" gap="12px">
+              <Text weight="bold">No products loaded</Text>
+              <Text size="small" secondary>Click &quot;Pull Products&quot; to fetch your store catalog.</Text>
+            </Box>
+          </Card.Content>
+        </Card>
+      )}
+
+      {/* Product table */}
+      {filteredProducts.length > 0 && (
+        <Card>
+          <Table
+            data={filteredProducts}
+            columns={[
+              {
+                title: '',
+                render: (row: CachedProductRow) => (
+                  <input type="checkbox" checked={selected.has(row.productId)} onChange={() => toggleSelect(row.productId)} />
+                ),
+                width: '40px',
+              },
+              {
+                title: 'Image',
+                render: (row: CachedProductRow) =>
+                  row.imageUrl ? <img src={row.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} /> : <Box width="40px" height="40px" />,
+                width: '60px',
+              },
+              {
+                title: 'Title',
+                render: (row: CachedProductRow) => {
+                  const preview = previewData?.get(row.productId);
+                  if (preview && preview.original.title !== preview.transformed.title) {
+                    return (
+                      <Box direction="vertical">
+                        <Text size="small" style={{ textDecoration: 'line-through' }}>{preview.original.title}</Text>
+                        <Text size="small" skin="success">{preview.transformed.title}</Text>
+                      </Box>
+                    );
+                  }
+                  return <Text size="small">{row.name}</Text>;
+                },
+                width: '18%',
+              },
+              {
+                title: 'Price',
+                render: (row: CachedProductRow) => <Text size="small">{row.price ? `$${row.price}` : '—'}</Text>,
+                width: '70px',
+              },
+              {
+                title: 'Stock',
+                render: (row: CachedProductRow) => (
+                  <Badge size="small" skin={row.availability === 'IN_STOCK' ? 'success' : 'danger'}>
+                    {row.availability === 'IN_STOCK' ? 'In Stock' : 'Out'}
+                  </Badge>
+                ),
+                width: '80px',
+              },
+              {
+                title: 'Variants',
+                render: (row: CachedProductRow) => <Text size="small">{row.variantCount}</Text>,
+                width: '50px',
+              },
+              {
+                title: 'Description',
+                render: (row: CachedProductRow) => (
+                  <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+                    {row.plainDescription ?? row.description ?? '—'}
+                  </Text>
+                ),
+                width: '18%',
+              },
+              {
+                title: 'AI Description',
+                render: (row: CachedProductRow) => (
+                  <Text size="tiny" skin={row.enhancedDescription ? 'success' : 'disabled'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+                    {row.enhancedDescription ?? '—'}
+                  </Text>
+                ),
+                width: '18%',
+              },
+              {
+                title: 'Sync',
+                render: (row: CachedProductRow) => {
+                  if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
+                  const skin = row.syncStatus.status === 'synced' ? 'success' : row.syncStatus.status === 'error' ? 'danger' : 'warning';
+                  return <Badge size="small" skin={skin}>{row.syncStatus.status}</Badge>;
+                },
+                width: '70px',
+              },
+              {
+                title: '',
+                render: (row: CachedProductRow) => (
+                  <Button size="tiny" skin="light" onClick={() => handleEnhanceOne(row.productId)} disabled={enhancing === row.productId}>
+                    {enhancing === row.productId ? '...' : 'AI'}
+                  </Button>
+                ),
+                width: '50px',
+              },
+            ]}
+          >
+            <TableToolbar>
+              <TableToolbar.Title>
+                {filteredProducts.length} products{activeFilter ? ' (filtered)' : ''}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
+              </TableToolbar.Title>
+            </TableToolbar>
+            <Table.Content />
+          </Table>
+        </Card>
+      )}
+    </Box>
+  );
+};
+
+// ─── Dashboard Tab (formerly Status Tab) ────────────────────────────────
 
 const statusColumns = [
   {
@@ -743,7 +1140,7 @@ const statusColumns = [
   },
 ];
 
-const StatusTab: FC = () => {
+const DashboardTab: FC = () => {
   const [data, setData] = useState<SyncSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -1042,13 +1439,14 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
 
 const TAB_ITEMS = [
   { id: 'connect', title: 'Connect' },
+  { id: 'dashboard', title: 'Dashboard' },
+  { id: 'products', title: 'Products' },
   { id: 'mapping', title: 'Field Mapping' },
-  { id: 'status', title: 'Sync Status' },
   { id: 'settings', title: 'Settings' },
 ];
 
 const SyncStreamPage: FC = () => {
-  const [activeTab, setActiveTab] = useState('connect');
+  const [activeTab, setActiveTab] = useState('dashboard');
   const [config, setConfig] = useState<AppConfigData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -1120,8 +1518,9 @@ const SyncStreamPage: FC = () => {
             />
 
             {activeTab === 'connect' && <ConnectTab config={config} onRefresh={loadConfig} />}
+            {activeTab === 'dashboard' && <DashboardTab />}
+            {activeTab === 'products' && <ProductsTab />}
             {activeTab === 'mapping' && <MappingTab config={config} />}
-            {activeTab === 'status' && <StatusTab />}
             {activeTab === 'settings' && <SettingsTab config={config} onRefresh={loadConfig} />}
           </Box>
         </Page.Content>
