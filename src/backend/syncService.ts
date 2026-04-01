@@ -27,6 +27,7 @@ import {
   bulkUpsertSyncStates,
   getRules,
   getFilters,
+  getCachedProductsByIds,
 } from './dataService';
 
 /**
@@ -260,4 +261,125 @@ export async function syncProduct(
     platforms,
     productIds: [productId],
   });
+}
+
+/**
+ * Sync specific products from the products_cache through the full pipeline.
+ * Used by the workbench to sync without re-fetching from Wix.
+ */
+export async function syncFromCache(
+  instanceId: string,
+  productIds: string[],
+  platforms: SyncOptions['platforms'],
+): Promise<BatchSyncResult> {
+  const config = await getAppConfig(instanceId);
+  if (!config) {
+    throw new Error('App not configured. Please complete setup first.');
+  }
+
+  const cachedProducts = await getCachedProductsByIds(instanceId, productIds);
+  if (cachedProducts.length === 0) {
+    return { total: 0, synced: 0, failed: 0, results: [] };
+  }
+
+  // Reconstruct WixProduct objects from cached product_data JSON
+  const products: WixProduct[] = cachedProducts.map((cp) => cp.productData as WixProduct);
+
+  const results: SyncResult[] = [];
+
+  if (platforms.includes('gmc')) {
+    if (!config.gmcConnected) {
+      throw new Error('GMC not connected. Please connect your account first.');
+    }
+
+    const accessToken = await getValidGmcAccessToken(instanceId);
+    const tokens = await getGmcTokens(instanceId);
+    const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
+
+    const filters = await getFilters(instanceId, 'gmc');
+    const filtered = applyFilters(products, filters, 'gmc');
+    const flattened = filtered.flatMap((p) => flattenVariants(p));
+
+    let enhancedMap: Map<string, { title: string; description: string }> | undefined;
+    if (config.aiEnhancementEnabled) {
+      const uniqueProducts = [...new Map(filtered.map((p) => [p._id ?? p.id, p])).values()];
+      enhancedMap = await enhanceProducts(uniqueProducts, instanceId, config.aiEnhancementStyle);
+    }
+
+    const rules = await getRules(instanceId, 'gmc');
+    const validProducts: GmcProductInput[] = [];
+    const validationFailures: SyncResult[] = [];
+
+    for (const item of flattened) {
+      const productId = item.product._id ?? item.product.id;
+      const enhanced = enhancedMap?.get(productId);
+      const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
+      const transformed = applyRules([gmcProduct], rules, 'gmc');
+      const errors = validateGmc(transformed[0], transformed[0].offerId);
+
+      if (errors.length > 0) {
+        validationFailures.push({
+          productId: transformed[0].offerId,
+          platform: 'gmc',
+          success: false,
+          errors,
+        });
+      } else {
+        validProducts.push(transformed[0]);
+      }
+    }
+
+    results.push(...validationFailures);
+
+    if (validProducts.length > 0) {
+      const batchResults = await batchInsertProducts(
+        tokens.merchantId,
+        config.gmcDataSourceId ?? '',
+        validProducts,
+        accessToken,
+      );
+
+      for (const result of batchResults) {
+        if (result.success) {
+          results.push({
+            productId: result.offerId,
+            platform: 'gmc',
+            success: true,
+            externalId: result.name,
+          });
+        } else {
+          results.push({
+            productId: result.offerId,
+            platform: 'gmc',
+            success: false,
+            errors: [{
+              field: 'api',
+              platform: 'gmc' as const,
+              message: result.error ?? 'Unknown error',
+              productId: result.offerId,
+            }],
+          });
+        }
+      }
+    }
+  }
+
+  const syncStates: SyncState[] = results.map((r) => ({
+    productId: r.productId,
+    platform: r.platform,
+    status: r.success ? 'synced' as const : 'error' as const,
+    lastSynced: new Date(),
+    errorLog: r.errors ?? null,
+    externalId: r.externalId ?? '',
+  }));
+
+  await bulkUpsertSyncStates(syncStates);
+
+  const synced = results.filter((r) => r.success).length;
+  return {
+    total: results.length,
+    synced,
+    failed: results.length - synced,
+    results,
+  };
 }
