@@ -775,6 +775,15 @@ const ProductsTab: FC = () => {
   const [previewData, setPreviewData] = useState<Map<string, any> | null>(null);
   const [previewing, setPreviewing] = useState(false);
 
+  const [aiPreviews, setAiPreviews] = useState<Array<{
+    productId: string;
+    original: { title: string; description: string };
+    enhanced: { title: string; description: string } | null;
+    accepted: boolean;
+  }> | null>(null);
+  const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
+  const [aiApplying, setAiApplying] = useState(false);
+
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -886,6 +895,52 @@ const ProductsTab: FC = () => {
     } finally { setEnhancing(null); }
   }, [selected, loadProducts]);
 
+  const handleEnhanceAndPreview = useCallback(async () => {
+    if (selected.size === 0) return;
+    setAiPreviewLoading(true); setError(null);
+    try {
+      const response = await appFetch('/api/products-apply-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: Array.from(selected) }),
+      });
+      const data = await response.json();
+      setAiPreviews(
+        (data.previews ?? []).map((p: any) => ({ ...p, accepted: true })),
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate previews');
+    } finally { setAiPreviewLoading(false); }
+  }, [selected]);
+
+  const handleApplyToStore = useCallback(async () => {
+    if (!aiPreviews) return;
+    const accepted = aiPreviews.filter((p) => p.accepted && p.enhanced);
+    if (accepted.length === 0) { setAiPreviews(null); return; }
+
+    setAiApplying(true); setError(null);
+    try {
+      const response = await appFetch('/api/products-apply-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          instanceId: 'default',
+          updates: accepted.map((p) => ({
+            productId: p.productId,
+            title: p.enhanced!.title,
+            description: p.enhanced!.description,
+          })),
+        }),
+      });
+      const data = await response.json();
+      setSuccess(`Applied AI descriptions to ${data.applied} products.${data.failed > 0 ? ` ${data.failed} failed.` : ''}`);
+      setAiPreviews(null);
+      await loadProducts();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply enhancements');
+    } finally { setAiApplying(false); }
+  }, [aiPreviews, loadProducts]);
+
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
     if (ids.length === 0) return;
@@ -932,8 +987,8 @@ const ProductsTab: FC = () => {
         {cachedAt && <Text size="tiny" secondary>Last refreshed: {new Date(cachedAt).toLocaleString()}</Text>}
         <Box marginLeft="auto" gap="12px">
           {selected.size > 0 && (
-            <Button size="small" onClick={handleEnhanceBulk} disabled={enhancing === 'bulk'}>
-              {enhancing === 'bulk' ? 'Enhancing...' : `Generate AI (${selected.size})`}
+            <Button size="small" onClick={handleEnhanceAndPreview} disabled={aiPreviewLoading}>
+              {aiPreviewLoading ? 'Generating...' : `Enhance with AI (${selected.size})`}
             </Button>
           )}
           <Button size="small" onClick={handlePreviewRules} disabled={previewing || products.length === 0}>
@@ -944,6 +999,76 @@ const ProductsTab: FC = () => {
           </Button>
         </Box>
       </Box>
+
+      {/* AI Enhancement Preview */}
+      {aiPreviews && (
+        <Card>
+          <Card.Header
+            title="AI Enhancement Preview"
+            subtitle={`${aiPreviews.filter((p) => p.accepted).length} of ${aiPreviews.length} selected for update`}
+            suffix={
+              <Box gap="12px">
+                <Button size="small" priority="secondary" onClick={() => setAiPreviews(null)}>
+                  Cancel
+                </Button>
+                <Button size="small" skin="dark" onClick={handleApplyToStore} disabled={aiApplying}>
+                  {aiApplying ? 'Applying...' : 'Apply to Store'}
+                </Button>
+              </Box>
+            }
+          />
+          <Card.Divider />
+          <Card.Content>
+            <Box direction="vertical" gap="12px" maxHeight="400px" overflowY="auto">
+              {aiPreviews.map((preview) => (
+                <Card key={preview.productId}>
+                  <Card.Content>
+                    <Box gap="12px" verticalAlign="top">
+                      <Box width="30px">
+                        <ToggleSwitch
+                          size="small"
+                          checked={preview.accepted}
+                          onChange={() => {
+                            setAiPreviews((prev) =>
+                              prev?.map((p) =>
+                                p.productId === preview.productId
+                                  ? { ...p, accepted: !p.accepted }
+                                  : p,
+                              ) ?? null,
+                            );
+                          }}
+                        />
+                      </Box>
+                      <Box direction="vertical" gap="6px" width="100%">
+                        <Box gap="12px">
+                          <Box direction="vertical" width="50%">
+                            <Text size="tiny" weight="bold" secondary>Original Title</Text>
+                            <Text size="small">{preview.original.title}</Text>
+                          </Box>
+                          <Box direction="vertical" width="50%">
+                            <Text size="tiny" weight="bold" skin="success">Enhanced Title</Text>
+                            <Text size="small">{preview.enhanced?.title ?? '—'}</Text>
+                          </Box>
+                        </Box>
+                        <Box gap="12px">
+                          <Box direction="vertical" width="50%">
+                            <Text size="tiny" weight="bold" secondary>Original Description</Text>
+                            <Text size="tiny">{(preview.original.description ?? '').slice(0, 200)}{(preview.original.description ?? '').length > 200 ? '...' : ''}</Text>
+                          </Box>
+                          <Box direction="vertical" width="50%">
+                            <Text size="tiny" weight="bold" skin="success">Enhanced Description</Text>
+                            <Text size="tiny">{(preview.enhanced?.description ?? '').slice(0, 200)}{(preview.enhanced?.description ?? '').length > 200 ? '...' : ''}</Text>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Card.Content>
+                </Card>
+              ))}
+            </Box>
+          </Card.Content>
+        </Card>
+      )}
 
       {/* Filter bar */}
       <Card>
@@ -1146,6 +1271,13 @@ const DashboardTab: FC = () => {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [syncProgress, setSyncProgress] = useState<{
+    totalProducts: number;
+    processed: number;
+    currentStatus: string;
+    syncedCount: number;
+    failedCount: number;
+  } | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -1163,22 +1295,37 @@ const DashboardTab: FC = () => {
     loadData();
   }, [loadData]);
 
+  const pollProgress = useCallback(async () => {
+    try {
+      const response = await appFetch('/api/sync-progress?instanceId=default');
+      const data = await response.json();
+      if (data.progress) {
+        setSyncProgress(data.progress);
+        if (data.progress.currentStatus === 'running') {
+          setTimeout(pollProgress, 2000);
+        }
+      }
+    } catch { /* ignore polling errors */ }
+  }, []);
+
   const handleSync = useCallback(async () => {
     setSyncing(true);
     setSyncResult(null);
     setError(null);
     try {
       const result = await triggerSync();
+      pollProgress();
       setSyncResult(
         `Sync complete: ${result.synced} synced, ${result.failed} failed out of ${result.total} total`,
       );
+      setSyncProgress(null);
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sync failed');
     } finally {
       setSyncing(false);
     }
-  }, [loadData]);
+  }, [loadData, pollProgress]);
 
   if (loading) {
     return (
@@ -1193,10 +1340,38 @@ const DashboardTab: FC = () => {
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
       {syncResult && <SectionHelper appearance="success">{syncResult}</SectionHelper>}
 
-      <Box>
+      <Box direction="vertical">
         <Button onClick={handleSync} disabled={syncing} size="small">
           {syncing ? 'Syncing...' : 'Sync Now'}
         </Button>
+        {syncProgress && syncProgress.currentStatus === 'running' && (
+          <Box direction="vertical" gap="6px" marginTop="12px">
+            <Box gap="6px" verticalAlign="middle">
+              <Loader size="tiny" />
+              <Text size="small">
+                Syncing: {syncProgress.processed} / {syncProgress.totalProducts} products
+              </Text>
+            </Box>
+            <Box
+              height="8px"
+              backgroundColor="#E8E8E8"
+              borderRadius="4px"
+              overflow="hidden"
+            >
+              <Box
+                height="100%"
+                width={`${syncProgress.totalProducts > 0
+                  ? Math.round((syncProgress.processed / syncProgress.totalProducts) * 100)
+                  : 0}%`}
+                backgroundColor="#3B82F6"
+                borderRadius="4px"
+              />
+            </Box>
+            <Text size="tiny" secondary>
+              {syncProgress.syncedCount} synced, {syncProgress.failedCount} failed
+            </Text>
+          </Box>
+        )}
       </Box>
 
       <Box gap="12px">
