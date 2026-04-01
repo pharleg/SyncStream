@@ -9,6 +9,8 @@ import type {
   BatchSyncResult,
   SyncOptions,
   SyncResult,
+  PaginatedSyncResult,
+  SyncProgress,
 } from '../types/sync.types';
 import type { WixProduct, SyncState } from '../types/wix.types';
 import type { GmcProductInput } from '../types/gmc.types';
@@ -28,6 +30,7 @@ import {
   getRules,
   getFilters,
   getCachedProductsByIds,
+  upsertSyncProgress,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -149,10 +152,11 @@ export async function runFullSync(
     ? await fetchProductsByIds(options.productIds)
     : await fetchAllProducts();
 
-  // Cloudflare Workers has a 50 subrequest limit.
-  // Process max 5 products per invocation to stay within limits.
+  // Apply offset for paginated sync
+  const offset = options.offset ?? 0;
   const MAX_PRODUCTS_PER_SYNC = 15;
-  const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
+  const products = allProducts.slice(offset, offset + MAX_PRODUCTS_PER_SYNC);
+  const hasMore = offset + MAX_PRODUCTS_PER_SYNC < allProducts.length;
 
   const results: SyncResult[] = [];
 
@@ -263,7 +267,10 @@ export async function runFullSync(
     synced,
     failed: results.length - synced,
     results,
-  };
+    _totalProducts: allProducts.length,
+    _hasMore: hasMore,
+    _nextOffset: hasMore ? offset + MAX_PRODUCTS_PER_SYNC : undefined,
+  } as BatchSyncResult & { _totalProducts: number; _hasMore: boolean; _nextOffset?: number };
 }
 
 export async function syncProduct(
@@ -395,5 +402,75 @@ export async function syncFromCache(
     synced,
     failed: results.length - synced,
     results,
+  };
+}
+
+/**
+ * Run a full catalog sync with automatic pagination and progress tracking.
+ * Processes all products in chunks of MAX_PRODUCTS_PER_SYNC.
+ */
+export async function runPaginatedSync(
+  instanceId: string,
+  platforms: SyncOptions['platforms'],
+): Promise<PaginatedSyncResult> {
+  const allResults: SyncResult[] = [];
+  let offset = 0;
+  let totalProducts = 0;
+
+  const progress: SyncProgress = {
+    instanceId,
+    totalProducts: 0,
+    processed: 0,
+    currentStatus: 'running',
+    syncedCount: 0,
+    failedCount: 0,
+    startedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  await upsertSyncProgress(progress);
+
+  try {
+    let hasMore = true;
+
+    while (hasMore) {
+      const result = await runFullSync(instanceId, { platforms, offset }) as BatchSyncResult & {
+        _totalProducts: number;
+        _hasMore: boolean;
+        _nextOffset?: number;
+      };
+
+      allResults.push(...result.results);
+      totalProducts = result._totalProducts;
+      hasMore = result._hasMore;
+      offset = result._nextOffset ?? offset;
+
+      // Update progress after each chunk
+      progress.totalProducts = totalProducts;
+      progress.processed = Math.min(offset, totalProducts);
+      progress.syncedCount = allResults.filter((r) => r.success).length;
+      progress.failedCount = allResults.filter((r) => !r.success).length;
+      progress.updatedAt = new Date().toISOString();
+
+      await upsertSyncProgress(progress);
+    }
+
+    progress.currentStatus = 'completed';
+    progress.processed = totalProducts;
+    await upsertSyncProgress(progress);
+  } catch (error) {
+    progress.currentStatus = 'error';
+    progress.error = error instanceof Error ? error.message : 'Unknown error';
+    await upsertSyncProgress(progress);
+    throw error;
+  }
+
+  const synced = allResults.filter((r) => r.success).length;
+  return {
+    total: allResults.length,
+    synced,
+    failed: allResults.length - synced,
+    results: allResults,
+    progress,
   };
 }
