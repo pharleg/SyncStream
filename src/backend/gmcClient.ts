@@ -91,9 +91,37 @@ export async function deleteProduct(
 }
 
 /**
+ * Run async tasks with a concurrency limit.
+ * Returns results in the same order as the input tasks.
+ */
+async function withConcurrency<T>(
+  limit: number,
+  tasks: (() => Promise<T>)[],
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(tasks.length);
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < tasks.length) {
+      const index = nextIndex++;
+      try {
+        const value = await tasks[index]();
+        results[index] = { status: 'fulfilled', value };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, () => worker());
+  await Promise.all(workers);
+  return results;
+}
+
+/**
  * Insert multiple products concurrently.
  * Replaces the v2.1 custombatch endpoint which doesn't exist in Merchant API v1.
- * Processes in chunks to avoid overwhelming the API.
+ * Processes up to 5 concurrent requests to stay within Cloudflare Workers subrequest limits.
  */
 export async function batchInsertProducts(
   merchantId: string,
@@ -101,35 +129,24 @@ export async function batchInsertProducts(
   products: GmcProductInput[],
   accessToken: string,
 ): Promise<GmcInsertResult[]> {
-  const results: GmcInsertResult[] = [];
-
-  // Sequential inserts to stay within Cloudflare Workers subrequest limits
-  for (const product of products) {
-    try {
-      const response = await insertProduct(
-        merchantId,
-        dataSourceId,
-        product,
-        accessToken,
-      );
-      results.push({
+  const tasks = products.map((product) => () =>
+    insertProduct(merchantId, dataSourceId, product, accessToken)
+      .then((response): GmcInsertResult => ({
         offerId: product.offerId,
         success: true,
         name: response.name,
-      });
-    } catch (error) {
-      results.push({
+      }))
+      .catch((error): GmcInsertResult => ({
         offerId: product.offerId,
         success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Unknown error',
-      });
-    }
-  }
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })),
+  );
 
-  return results;
+  const settled = await withConcurrency(5, tasks);
+  return settled.map((r) =>
+    r.status === 'fulfilled' ? r.value : { offerId: '', success: false, error: 'Worker failed' },
+  );
 }
 
 /**
