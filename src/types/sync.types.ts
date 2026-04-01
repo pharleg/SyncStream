@@ -21,7 +21,6 @@ export interface SyncOptions {
   platforms: Platform[];
   productIds?: string[];
   fullSync?: boolean;
-  offset?: number;
 }
 
 export interface SyncProgress {

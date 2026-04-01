@@ -138,25 +138,21 @@ async function fetchProductsByIds(
   return products;
 }
 
-export async function runFullSync(
+const MAX_PRODUCTS_PER_SYNC = 15;
+
+/**
+ * Sync a chunk of pre-fetched products through the full pipeline.
+ * Shared by runFullSync and runPaginatedSync.
+ */
+async function syncProductChunk(
   instanceId: string,
-  options: SyncOptions,
+  products: WixProduct[],
+  platforms: SyncOptions['platforms'],
 ): Promise<BatchSyncResult> {
   const config = await getAppConfig(instanceId);
   if (!config) {
     throw new Error('App not configured. Please complete setup first.');
   }
-
-  // 1. Fetch products
-  const allProducts = options.productIds
-    ? await fetchProductsByIds(options.productIds)
-    : await fetchAllProducts();
-
-  // Apply offset for paginated sync
-  const offset = options.offset ?? 0;
-  const MAX_PRODUCTS_PER_SYNC = 15;
-  const products = allProducts.slice(offset, offset + MAX_PRODUCTS_PER_SYNC);
-  const hasMore = offset + MAX_PRODUCTS_PER_SYNC < allProducts.length;
 
   const results: SyncResult[] = [];
 
@@ -267,10 +263,19 @@ export async function runFullSync(
     synced,
     failed: results.length - synced,
     results,
-    _totalProducts: allProducts.length,
-    _hasMore: hasMore,
-    _nextOffset: hasMore ? offset + MAX_PRODUCTS_PER_SYNC : undefined,
-  } as BatchSyncResult & { _totalProducts: number; _hasMore: boolean; _nextOffset?: number };
+  };
+}
+
+export async function runFullSync(
+  instanceId: string,
+  options: SyncOptions,
+): Promise<BatchSyncResult> {
+  const allProducts = options.productIds
+    ? await fetchProductsByIds(options.productIds)
+    : await fetchAllProducts();
+
+  const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
+  return syncProductChunk(instanceId, products, options.platforms);
 }
 
 export async function syncProduct(
@@ -407,15 +412,13 @@ export async function syncFromCache(
 
 /**
  * Run a full catalog sync with automatic pagination and progress tracking.
- * Processes all products in chunks of MAX_PRODUCTS_PER_SYNC.
+ * Fetches all products ONCE, then processes in chunks of MAX_PRODUCTS_PER_SYNC.
  */
 export async function runPaginatedSync(
   instanceId: string,
   platforms: SyncOptions['platforms'],
 ): Promise<PaginatedSyncResult> {
   const allResults: SyncResult[] = [];
-  let offset = 0;
-  let totalProducts = 0;
 
   const progress: SyncProgress = {
     instanceId,
@@ -431,23 +434,20 @@ export async function runPaginatedSync(
   await upsertSyncProgress(progress);
 
   try {
-    let hasMore = true;
+    // Fetch entire catalog once
+    const allProducts = await fetchAllProducts();
+    const totalProducts = allProducts.length;
+    progress.totalProducts = totalProducts;
+    await upsertSyncProgress(progress);
 
-    while (hasMore) {
-      const result = await runFullSync(instanceId, { platforms, offset }) as BatchSyncResult & {
-        _totalProducts: number;
-        _hasMore: boolean;
-        _nextOffset?: number;
-      };
+    // Process in chunks
+    for (let offset = 0; offset < totalProducts; offset += MAX_PRODUCTS_PER_SYNC) {
+      const chunk = allProducts.slice(offset, offset + MAX_PRODUCTS_PER_SYNC);
+      const result = await syncProductChunk(instanceId, chunk, platforms);
 
       allResults.push(...result.results);
-      totalProducts = result._totalProducts;
-      hasMore = result._hasMore;
-      offset = result._nextOffset ?? offset;
 
-      // Update progress after each chunk
-      progress.totalProducts = totalProducts;
-      progress.processed = Math.min(offset, totalProducts);
+      progress.processed = Math.min(offset + MAX_PRODUCTS_PER_SYNC, totalProducts);
       progress.syncedCount = allResults.filter((r) => r.success).length;
       progress.failedCount = allResults.filter((r) => !r.success).length;
       progress.updatedAt = new Date().toISOString();

@@ -1312,15 +1312,16 @@ const DashboardTab: FC = () => {
     setSyncing(true);
     setSyncResult(null);
     setError(null);
+    pollProgress();
     try {
       const result = await triggerSync();
-      pollProgress();
+      setSyncProgress(null);
       setSyncResult(
         `Sync complete: ${result.synced} synced, ${result.failed} failed out of ${result.total} total`,
       );
-      setSyncProgress(null);
       await loadData();
     } catch (err) {
+      setSyncProgress(null);
       setError(err instanceof Error ? err.message : 'Sync failed');
     } finally {
       setSyncing(false);
