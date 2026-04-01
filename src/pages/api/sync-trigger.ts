@@ -1,9 +1,10 @@
 /**
  * POST /api/sync-trigger
- * Triggers a full sync for the given instance.
+ * Triggers a paginated full sync for the given instance.
+ * Returns final results after all chunks are processed.
  */
 import type { APIRoute } from 'astro';
-import { runFullSync } from '../../backend/syncService';
+import { runPaginatedSync } from '../../backend/syncService';
 import type { Platform } from '../../types/sync.types';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -13,9 +14,10 @@ export const POST: APIRoute = async ({ request }) => {
       platforms?: Platform[];
     };
 
-    const result = await runFullSync(body.instanceId, {
-      platforms: body.platforms ?? ['gmc'],
-    });
+    const result = await runPaginatedSync(
+      body.instanceId,
+      body.platforms ?? ['gmc'],
+    );
 
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
