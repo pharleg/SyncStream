@@ -337,3 +337,129 @@ export async function saveEnhancedContent(content: Omit<EnhancedContent, 'id'>):
     }, { onConflict: 'instance_id,product_id,platform' });
   if (error) throw new Error(`Failed to save enhanced content: ${error.message}`);
 }
+
+// ── Products Cache CRUD ──
+
+export interface CachedProduct {
+  id: string;
+  instanceId: string;
+  productId: string;
+  name: string;
+  imageUrl?: string;
+  price?: string;
+  currency: string;
+  availability?: string;
+  variantCount: number;
+  description?: string;
+  plainDescription?: string;
+  brand?: string;
+  slug?: string;
+  productData: any;
+  cachedAt: string;
+}
+
+export async function upsertCachedProducts(
+  instanceId: string,
+  products: Omit<CachedProduct, 'id' | 'cachedAt'>[],
+): Promise<number> {
+  if (products.length === 0) return 0;
+  const db = await getClient();
+  const rows = products.map((p) => ({
+    instance_id: instanceId,
+    product_id: p.productId,
+    name: p.name,
+    image_url: p.imageUrl ?? null,
+    price: p.price ?? null,
+    currency: p.currency,
+    availability: p.availability ?? null,
+    variant_count: p.variantCount,
+    description: p.description ?? null,
+    plain_description: p.plainDescription ?? null,
+    brand: p.brand ?? null,
+    slug: p.slug ?? null,
+    product_data: p.productData,
+    cached_at: new Date().toISOString(),
+  }));
+
+  const { error } = await db
+    .from('products_cache')
+    .upsert(rows, { onConflict: 'instance_id,product_id' });
+
+  if (error) throw new Error(`Failed to cache products: ${error.message}`);
+  return rows.length;
+}
+
+export async function getCachedProducts(instanceId: string): Promise<CachedProduct[]> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('products_cache')
+    .select('*')
+    .eq('instance_id', instanceId)
+    .order('name', { ascending: true });
+
+  if (error) throw new Error(`Failed to fetch cached products: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    instanceId: row.instance_id,
+    productId: row.product_id,
+    name: row.name,
+    imageUrl: row.image_url ?? undefined,
+    price: row.price ?? undefined,
+    currency: row.currency,
+    availability: row.availability ?? undefined,
+    variantCount: row.variant_count,
+    description: row.description ?? undefined,
+    plainDescription: row.plain_description ?? undefined,
+    brand: row.brand ?? undefined,
+    slug: row.slug ?? undefined,
+    productData: row.product_data,
+    cachedAt: row.cached_at,
+  }));
+}
+
+export async function getCachedProductsByIds(
+  instanceId: string,
+  productIds: string[],
+): Promise<CachedProduct[]> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('products_cache')
+    .select('*')
+    .eq('instance_id', instanceId)
+    .in('product_id', productIds);
+
+  if (error) throw new Error(`Failed to fetch cached products: ${error.message}`);
+
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    instanceId: row.instance_id,
+    productId: row.product_id,
+    name: row.name,
+    imageUrl: row.image_url ?? undefined,
+    price: row.price ?? undefined,
+    currency: row.currency,
+    availability: row.availability ?? undefined,
+    variantCount: row.variant_count,
+    description: row.description ?? undefined,
+    plainDescription: row.plain_description ?? undefined,
+    brand: row.brand ?? undefined,
+    slug: row.slug ?? undefined,
+    productData: row.product_data,
+    cachedAt: row.cached_at,
+  }));
+}
+
+export async function getProductsCacheTimestamp(instanceId: string): Promise<string | null> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('products_cache')
+    .select('cached_at')
+    .eq('instance_id', instanceId)
+    .order('cached_at', { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error || !data) return null;
+  return data.cached_at;
+}
