@@ -21,4 +21,21 @@ export interface SyncOptions {
   platforms: Platform[];
   productIds?: string[];
   fullSync?: boolean;
+  offset?: number;
+}
+
+export interface SyncProgress {
+  instanceId: string;
+  totalProducts: number;
+  processed: number;
+  currentStatus: 'running' | 'completed' | 'error';
+  syncedCount: number;
+  failedCount: number;
+  startedAt: string;
+  updatedAt: string;
+  error?: string;
+}
+
+export interface PaginatedSyncResult extends BatchSyncResult {
+  progress: SyncProgress;
 }
