@@ -12,7 +12,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { secrets } from '@wix/secrets';
 import type { AppConfig, SyncState } from '../types/wix.types';
 import type { SyncRule, SyncFilter, EnhancedContent } from '../types/rules.types';
-import type { Platform } from '../types/sync.types';
+import type { Platform, SyncProgress } from '../types/sync.types';
 
 let _client: SupabaseClient | null = null;
 
@@ -462,4 +462,46 @@ export async function getProductsCacheTimestamp(instanceId: string): Promise<str
 
   if (error || !data) return null;
   return data.cached_at;
+}
+
+// ── Sync Progress CRUD ──
+
+export async function upsertSyncProgress(progress: SyncProgress): Promise<void> {
+  const db = await getClient();
+  const { error } = await db
+    .from('sync_progress')
+    .upsert({
+      instance_id: progress.instanceId,
+      total_products: progress.totalProducts,
+      processed: progress.processed,
+      current_status: progress.currentStatus,
+      synced_count: progress.syncedCount,
+      failed_count: progress.failedCount,
+      started_at: progress.startedAt,
+      updated_at: new Date().toISOString(),
+      error: progress.error ?? null,
+    }, { onConflict: 'instance_id' });
+  if (error) throw new Error(`Failed to upsert sync progress: ${error.message}`);
+}
+
+export async function getSyncProgress(instanceId: string): Promise<SyncProgress | null> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('sync_progress')
+    .select('*')
+    .eq('instance_id', instanceId)
+    .limit(1)
+    .single();
+  if (error || !data) return null;
+  return {
+    instanceId: data.instance_id,
+    totalProducts: data.total_products,
+    processed: data.processed,
+    currentStatus: data.current_status,
+    syncedCount: data.synced_count,
+    failedCount: data.failed_count,
+    startedAt: data.started_at,
+    updatedAt: data.updated_at,
+    error: data.error ?? undefined,
+  };
 }
