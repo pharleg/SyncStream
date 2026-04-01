@@ -464,6 +464,27 @@ export async function getProductsCacheTimestamp(instanceId: string): Promise<str
   return data.cached_at;
 }
 
+export async function updateCachedProductFields(
+  instanceId: string,
+  productId: string,
+  fields: { name?: string; description?: string; plainDescription?: string },
+): Promise<void> {
+  const db = await getClient();
+
+  const updateData: Record<string, unknown> = { cached_at: new Date().toISOString() };
+  if (fields.name !== undefined) updateData.name = fields.name;
+  if (fields.description !== undefined) updateData.description = fields.description;
+  if (fields.plainDescription !== undefined) updateData.plain_description = fields.plainDescription;
+
+  const { error } = await db
+    .from('products_cache')
+    .update(updateData)
+    .eq('instance_id', instanceId)
+    .eq('product_id', productId);
+
+  if (error) throw new Error(`Failed to update cached product: ${error.message}`);
+}
+
 // ── Sync Progress CRUD ──
 
 export async function upsertSyncProgress(progress: SyncProgress): Promise<void> {

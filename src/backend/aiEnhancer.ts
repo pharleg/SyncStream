@@ -181,3 +181,35 @@ export async function enhanceProducts(
 
   return results;
 }
+
+/**
+ * Write AI-enhanced titles and descriptions back to Wix products.
+ * This is the ONLY place Wix product writes happen for AI content.
+ */
+export async function applyEnhancementsToWix(
+  instanceId: string,
+  productUpdates: Array<{ productId: string; title: string; description: string }>,
+): Promise<Array<{ productId: string; success: boolean; error?: string }>> {
+  const { productsV3 } = await import('@wix/stores');
+  const results: Array<{ productId: string; success: boolean; error?: string }> = [];
+
+  for (const update of productUpdates) {
+    try {
+      await productsV3.updateProduct(update.productId, {
+        product: {
+          name: update.title,
+          description: update.description,
+        },
+      });
+      results.push({ productId: update.productId, success: true });
+    } catch (error) {
+      results.push({
+        productId: update.productId,
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  return results;
+}
