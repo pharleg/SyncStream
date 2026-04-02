@@ -207,28 +207,12 @@ export async function applyEnhancementsToWix(
         continue;
       }
 
-      // Use REST API directly — SDK strips revision during serialization
-      const { httpClient } = await import('@wix/essentials');
-      const res = await httpClient.fetchWithAuth(
-        `https://www.wixapis.com/stores/v3/products/${update.productId}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            product: {
-              revision,
-              name: update.title,
-              description: update.description,
-            },
-          }),
-        },
-      );
-
-      if (!res.ok) {
-        const errText = await res.text();
-        results.push({ productId: update.productId, success: false, error: `REST ${res.status}: ${errText.slice(0, 400)}` });
-        continue;
-      }
+      // V3 SDK: description is RichContent type, use plainDescription for string updates
+      await productsV3.updateProduct(update.productId, {
+        revision,
+        name: update.title,
+        plainDescription: update.description,
+      } as any);
     } catch (error) {
       results.push({
         productId: update.productId,
