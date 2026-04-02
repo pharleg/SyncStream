@@ -1022,7 +1022,7 @@ const ProductsTab: FC = () => {
           />
           <Card.Divider />
           <Card.Content>
-            <Box direction="vertical" gap="12px" maxHeight="400px" overflowY="auto">
+            <Box direction="vertical" gap="12px" maxHeight="600px" overflowY="auto">
               {aiPreviews.map((preview) => (
                 <Card key={preview.productId}>
                   <Card.Content>
@@ -1056,11 +1056,11 @@ const ProductsTab: FC = () => {
                         <Box gap="12px">
                           <Box direction="vertical" width="50%">
                             <Text size="tiny" weight="bold" secondary>Original Description</Text>
-                            <Text size="tiny">{(preview.original.description ?? '').slice(0, 200)}{(preview.original.description ?? '').length > 200 ? '...' : ''}</Text>
+                            <Text size="tiny">{preview.original.description ?? ''}</Text>
                           </Box>
                           <Box direction="vertical" width="50%">
                             <Text size="tiny" weight="bold" skin="success">Enhanced Description</Text>
-                            <Text size="tiny">{(preview.enhanced?.description ?? '').slice(0, 200)}{(preview.enhanced?.description ?? '').length > 200 ? '...' : ''}</Text>
+                            <Text size="tiny">{preview.enhanced?.description ?? ''}</Text>
                           </Box>
                         </Box>
                       </Box>
