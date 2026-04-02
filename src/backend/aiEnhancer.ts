@@ -198,18 +198,16 @@ export async function applyEnhancementsToWix(
 
   for (const update of productUpdates) {
     try {
-      // Fetch current product, then update with only name + description changed
+      // DEBUG: Return the getProduct response shape so we can find revision
       const current = await productsV3.getProduct(update.productId) as any;
-
-      // V1 SDK: use the products.updateProduct from @wix/stores (v1) which doesn't need revision
-      const { products } = await import('@wix/stores');
-      await products.updateProduct(update.productId, {
-        product: {
-          name: update.title,
-          description: update.description,
-        },
-      });
-      results.push({ productId: update.productId, success: true });
+      const sample = JSON.stringify(current, (key, val) => {
+        // Truncate long values to keep response small
+        if (typeof val === 'string' && val.length > 50) return val.slice(0, 50) + '...';
+        if (Array.isArray(val) && val.length > 2) return [val[0], `...(${val.length} items)`];
+        return val;
+      }).slice(0, 800);
+      results.push({ productId: update.productId, success: false, error: `DEBUG getProduct shape: ${sample}` });
+      continue;
     } catch (error) {
       results.push({
         productId: update.productId,
