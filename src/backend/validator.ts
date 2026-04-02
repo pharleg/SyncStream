@@ -59,8 +59,8 @@ export function validateGmc(
 
   // SKU warning: fallback IDs (UUIDs or underscore-joined) suggest no SKU was set
   if (product.offerId) {
-    const looksLikeFallback = product.offerId.includes('_') ||
-      /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(product.offerId);
+    // Match UUID patterns (with optional _variantId suffix) — not merchant SKUs with underscores
+    const looksLikeFallback = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(_[0-9a-f-]+)?$/i.test(product.offerId);
     if (looksLikeFallback) {
       errors.push({
         field: 'offerId',
