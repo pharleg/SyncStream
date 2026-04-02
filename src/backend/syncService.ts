@@ -31,6 +31,7 @@ import {
   getFilters,
   getCachedProductsByIds,
   upsertSyncProgress,
+  getBatchProductPlatforms,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -156,7 +157,7 @@ async function syncProductChunk(
 
   const results: SyncResult[] = [];
 
-  if (options.platforms.includes('gmc')) {
+  if (platforms.includes('gmc')) {
     if (!config.gmcConnected) {
       throw new Error(
         'GMC not connected. Please connect your account first.',
@@ -171,14 +172,23 @@ async function syncProductChunk(
     const filters = await getFilters(instanceId, 'gmc');
     const filtered = applyFilters(products, filters, 'gmc');
 
+    // 2b. Per-product platform targeting — skip products not targeting GMC
+    const productIds = filtered.map((p) => p._id ?? p.id);
+    const platformMap = await getBatchProductPlatforms(productIds);
+    const platformFiltered = filtered.filter((p) => {
+      const id = p._id ?? p.id;
+      const targets = platformMap.get(id);
+      return targets === null || targets === undefined || targets.includes('gmc');
+    });
+
     // 3. Flatten variants
-    const flattened = filtered.flatMap((p) => flattenVariants(p));
+    const flattened = platformFiltered.flatMap((p) => flattenVariants(p));
 
     // 4. AI enhance (if enabled)
     let enhancedMap: Map<string, { title: string; description: string }> | undefined;
     if (config.aiEnhancementEnabled) {
       // Enhance at product level (not variant level) to avoid duplicate API calls
-      const uniqueProducts = [...new Map(filtered.map((p) => [p._id ?? p.id, p])).values()];
+      const uniqueProducts = [...new Map(platformFiltered.map((p) => [p._id ?? p.id, p])).values()];
       enhancedMap = await enhanceProducts(uniqueProducts, instanceId, config.aiEnhancementStyle);
     }
 

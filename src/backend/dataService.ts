@@ -526,3 +526,65 @@ export async function getSyncProgress(instanceId: string): Promise<SyncProgress 
     error: data.error ?? undefined,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Per-product Platform Targeting
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the target platforms for a specific product.
+ * Returns null if no targeting set (= sync to all connected).
+ */
+export async function getProductPlatforms(
+  productId: string,
+): Promise<('gmc' | 'meta')[] | null> {
+  const db = await getClient();
+  const { data } = await db
+    .from('sync_state')
+    .select('platforms')
+    .eq('product_id', productId)
+    .limit(1)
+    .single();
+  return data?.platforms ?? null;
+}
+
+/**
+ * Set the target platforms for one or more products.
+ * Pass null to reset to "all connected platforms".
+ */
+export async function setProductPlatforms(
+  productIds: string[],
+  platforms: ('gmc' | 'meta')[] | null,
+): Promise<void> {
+  const db = await getClient();
+  for (const productId of productIds) {
+    await db
+      .from('sync_state')
+      .upsert(
+        { product_id: productId, platform: 'gmc', status: 'pending', platforms },
+        { onConflict: 'product_id,platform' },
+      );
+  }
+}
+
+/**
+ * Get platforms map for a batch of product IDs.
+ * Returns Map<productId, platforms[]|null>.
+ */
+export async function getBatchProductPlatforms(
+  productIds: string[],
+): Promise<Map<string, ('gmc' | 'meta')[] | null>> {
+  const db = await getClient();
+  const { data } = await db
+    .from('sync_state')
+    .select('product_id, platforms')
+    .in('product_id', productIds);
+
+  const map = new Map<string, ('gmc' | 'meta')[] | null>();
+  for (const row of data ?? []) {
+    if (!map.has(row.product_id)) {
+      map.set(row.product_id, row.platforms ?? null);
+    }
+  }
+  return map;
+}

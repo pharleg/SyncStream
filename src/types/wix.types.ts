@@ -125,6 +125,8 @@ export interface SyncState {
   lastSynced: Date;
   errorLog: ValidationError[] | null;
   externalId: string;
+  /** Platforms this product should sync to. null = all connected. */
+  platforms?: ('gmc' | 'meta')[] | null;
 }
 
 export interface ValidationError {
