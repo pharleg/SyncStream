@@ -39,7 +39,6 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-import { version as APP_VERSION } from '../../../../../package.json';
 const CHANGELOG_URL = 'https://syncstream.app/changelog';
 
 // ─── Shared types & API helpers ──────────────────────────────────────────
@@ -1427,6 +1426,15 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
   const [aiStyle, setAiStyle] = useState(config?.aiEnhancementStyle ?? '');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [appVersion, setAppVersion] = useState<string>('');
+
+  useEffect(() => {
+    import('@wix/app-management').then(({ appInstances }) =>
+      appInstances.getAppInstance().then((res) => {
+        setAppVersion(res.instance?.appVersion ?? '');
+      }),
+    ).catch(() => {});
+  }, []);
 
   useEffect(() => {
     appFetch('/api/enhance?instanceId=default')
@@ -1618,7 +1626,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
 
       <Box direction="vertical" gap="6px" paddingTop="12px">
         <Box gap="6px" verticalAlign="middle">
-          <Text size="tiny" secondary>SyncStream v{APP_VERSION}</Text>
+          <Text size="tiny" secondary>SyncStream {appVersion ? `v${appVersion}` : ''}</Text>
           <Text size="tiny" secondary>·</Text>
           <Text size="tiny" skin="standard">
             <a href={CHANGELOG_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', textDecoration: 'none' }}>
