@@ -207,14 +207,23 @@ export async function applyEnhancementsToWix(
         continue;
       }
 
-      // V3 SDK: updateProduct(id, { product: { revision, ...fields } })
-      await (productsV3 as any).updateProduct(update.productId, {
-        product: {
-          revision,
-          name: update.title,
-          description: update.description,
+      // SDK updateProduct strips revision from the product object.
+      // Use REST API directly via httpClient to bypass SDK serialization.
+      const { httpClient } = await import('@wix/essentials');
+      await httpClient.fetchWithAuth(
+        `https://www.wixapis.com/stores/v3/products/${update.productId}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            product: {
+              revision,
+              name: update.title,
+              description: update.description,
+            },
+          }),
         },
-      });
+      );
     } catch (error) {
       results.push({
         productId: update.productId,
