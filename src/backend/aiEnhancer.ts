@@ -207,10 +207,9 @@ export async function applyEnhancementsToWix(
         continue;
       }
 
-      // SDK updateProduct strips revision from the product object.
-      // Use REST API directly via httpClient to bypass SDK serialization.
+      // Use REST API directly — SDK strips revision during serialization
       const { httpClient } = await import('@wix/essentials');
-      await httpClient.fetchWithAuth(
+      const res = await httpClient.fetchWithAuth(
         `https://www.wixapis.com/stores/v3/products/${update.productId}`,
         {
           method: 'PATCH',
@@ -224,6 +223,12 @@ export async function applyEnhancementsToWix(
           }),
         },
       );
+
+      if (!res.ok) {
+        const errText = await res.text();
+        results.push({ productId: update.productId, success: false, error: `REST ${res.status}: ${errText.slice(0, 400)}` });
+        continue;
+      }
     } catch (error) {
       results.push({
         productId: update.productId,
