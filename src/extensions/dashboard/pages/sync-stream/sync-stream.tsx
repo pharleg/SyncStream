@@ -936,7 +936,12 @@ const ProductsTab: FC = () => {
         }),
       });
       const data = await response.json();
-      setSuccess(`Applied AI descriptions to ${data.applied} products.${data.failed > 0 ? ` ${data.failed} failed.` : ''}`);
+      const failedErrors = (data.results ?? []).filter((r: any) => !r.success).map((r: any) => r.error).join('; ');
+      if (data.applied > 0) {
+        setSuccess(`Applied AI descriptions to ${data.applied} products.${data.failed > 0 ? ` ${data.failed} failed: ${failedErrors}` : ''}`);
+      } else {
+        setError(`Failed to apply: ${failedErrors || 'Unknown error'}`);
+      }
       setAiPreviews(null);
       await loadProducts();
     } catch (err) {
