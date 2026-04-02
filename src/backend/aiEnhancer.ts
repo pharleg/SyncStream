@@ -199,9 +199,11 @@ export async function applyEnhancementsToWix(
   for (const update of productUpdates) {
     try {
       // Must fetch current product to get revision (required by V3 API)
-      const current = await productsV3.getProduct(update.productId);
-      const revision = (current as any)?.revision ?? (current as any)?._revision;
-      console.log('[SyncStream] updateProduct revision:', revision, 'product:', JSON.stringify(current).slice(0, 500));
+      const response = await productsV3.getProduct(update.productId);
+      // SDK may return product directly or wrapped in { product: ... }
+      const current = (response as any)?.product ?? response;
+      const revision = current?.revision ?? current?._revision;
+      console.log('[SyncStream] updateProduct revision:', revision, 'responseKeys:', Object.keys(response ?? {}), 'productKeys:', Object.keys(current ?? {}));
 
       if (!revision) {
         results.push({ productId: update.productId, success: false, error: `Could not get product revision. Keys: ${Object.keys(current ?? {}).join(', ')}` });
