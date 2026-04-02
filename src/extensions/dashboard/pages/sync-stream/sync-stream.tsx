@@ -1204,9 +1204,9 @@ const ProductsTab: FC = () => {
               </Box>
               {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
                 const product = filteredProducts.find((p) => p.productId === r.productId);
-                const isExpanded = expandedCompliance === r.productId;
+                const isExpanded = expandedCompliance === r.offerId;
                 return (
-                  <Box key={r.productId} direction="vertical" gap="4px" padding="8px" style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, cursor: 'pointer' } as any} onClick={() => setExpandedCompliance(isExpanded ? null : r.productId)}>
+                  <Box key={r.offerId} direction="vertical" gap="4px" padding="8px" style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, cursor: 'pointer' } as any} onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)}>
                     <Box direction="horizontal" gap="8px" verticalAlign="middle">
                       <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
                         {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
@@ -1215,15 +1215,15 @@ const ProductsTab: FC = () => {
                       <Text size="tiny" secondary>ID: {r.offerId}</Text>
                     </Box>
                     {isExpanded && (
-                      <Box direction="vertical" gap="4px" paddingLeft="12px" marginTop="4px">
+                      <Box direction="vertical" gap="4px" style={{ paddingLeft: 12, marginTop: 4 }}>
                         {r.errors.map((e, i) => (
                           <Text key={`e${i}`} size="tiny" skin="error">
                             {e.field}: {e.message}
                           </Text>
                         ))}
                         {r.warnings.map((w, i) => (
-                          <Text key={`w${i}`} size="tiny" skin="standard">
-                            {w.field}: {w.message}
+                          <Text key={`w${i}`} size="tiny">
+                            ⚠ {w.field}: {w.message}
                           </Text>
                         ))}
                       </Box>
