@@ -39,7 +39,7 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-const APP_VERSION = '4.28.0';
+import { version as APP_VERSION } from '../../../../../package.json';
 const CHANGELOG_URL = 'https://syncstream.app/changelog';
 
 // ─── Shared types & API helpers ──────────────────────────────────────────
