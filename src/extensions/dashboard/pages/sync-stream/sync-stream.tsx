@@ -39,6 +39,9 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
+const APP_VERSION = '4.28.0';
+const CHANGELOG_URL = 'https://syncstream.app/changelog';
+
 // ─── Shared types & API helpers ──────────────────────────────────────────
 
 interface FieldMapping {
@@ -1607,6 +1610,18 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
           </Button>
         </Card.Content>
       </Card>
+
+      <Box direction="vertical" gap="6px" paddingTop="12px">
+        <Box gap="6px" verticalAlign="middle">
+          <Text size="tiny" secondary>SyncStream v{APP_VERSION}</Text>
+          <Text size="tiny" secondary>·</Text>
+          <Text size="tiny" skin="standard">
+            <a href={CHANGELOG_URL} target="_blank" rel="noopener noreferrer" style={{ color: '#3B82F6', textDecoration: 'none' }}>
+              What's new
+            </a>
+          </Text>
+        </Box>
+      </Box>
     </Box>
   );
 };
