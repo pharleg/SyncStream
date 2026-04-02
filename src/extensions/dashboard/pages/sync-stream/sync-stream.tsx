@@ -1190,7 +1190,7 @@ const ProductsTab: FC = () => {
             <Box direction="horizontal" gap="24px">
               <Text size="small">{compliance.compliantCount} compliant</Text>
               <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
-              <Text size="small" skin="destructive">{compliance.errorCount} errors</Text>
+              <Text size="small" skin="error">{compliance.errorCount} errors</Text>
               <Text size="small" secondary>of {compliance.totalProducts} products</Text>
             </Box>
           </Card.Content>

@@ -248,6 +248,7 @@ async function syncProductChunk(
               platform: 'gmc' as const,
               message: result.error ?? 'Unknown error',
               productId: result.offerId,
+              severity: 'error' as const,
             }],
           });
         }
@@ -393,6 +394,7 @@ export async function syncFromCache(
               platform: 'gmc' as const,
               message: result.error ?? 'Unknown error',
               productId: result.offerId,
+              severity: 'error' as const,
             }],
           });
         }
