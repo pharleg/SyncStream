@@ -785,6 +785,14 @@ const ProductsTab: FC = () => {
   }> | null>(null);
   const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
   const [aiApplying, setAiApplying] = useState(false);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [compliance, setCompliance] = useState<{
+    healthScore: number;
+    totalProducts: number;
+    compliantCount: number;
+    warningCount: number;
+    errorCount: number;
+  } | null>(null);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -947,6 +955,26 @@ const ProductsTab: FC = () => {
       setError(err instanceof Error ? err.message : 'Failed to apply enhancements');
     } finally { setAiApplying(false); }
   }, [aiPreviews, loadProducts]);
+
+  const handleComplianceCheck = useCallback(async () => {
+    setComplianceLoading(true); setError(null);
+    try {
+      const ids = selected.size > 0
+        ? Array.from(selected)
+        : filteredProducts.map((p) => p.productId);
+      const response = await appFetch('/api/compliance-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: ids, platform: 'gmc' }),
+      });
+      const data = await response.json();
+      if (data.error) { setError(data.error); return; }
+      setCompliance(data);
+      setSuccess(`Compliance check complete: ${data.healthScore}% healthy`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Compliance check failed');
+    } finally { setComplianceLoading(false); }
+  }, [selected, filteredProducts]);
 
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
@@ -1124,6 +1152,24 @@ const ProductsTab: FC = () => {
         </Card>
       )}
 
+      {compliance && (
+        <Card>
+          <Card.Header title="Feed Health" suffix={
+            <Badge skin={compliance.healthScore >= 90 ? 'success' : compliance.healthScore >= 70 ? 'warning' : 'danger'}>
+              {compliance.healthScore}%
+            </Badge>
+          } />
+          <Card.Content>
+            <Box direction="horizontal" gap="24px">
+              <Text size="small">{compliance.compliantCount} compliant</Text>
+              <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
+              <Text size="small" skin="destructive">{compliance.errorCount} errors</Text>
+              <Text size="small" secondary>of {compliance.totalProducts} products</Text>
+            </Box>
+          </Card.Content>
+        </Card>
+      )}
+
       {/* Product table */}
       {filteredProducts.length > 0 && (
         <Card>
@@ -1228,6 +1274,11 @@ const ProductsTab: FC = () => {
               <TableToolbar.Title>
                 {filteredProducts.length} products{activeFilter ? ' (filtered)' : ''}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
               </TableToolbar.Title>
+              <TableToolbar.Item>
+                <Button size="small" skin="light" onClick={handleComplianceCheck} disabled={complianceLoading}>
+                  {complianceLoading ? 'Checking...' : 'Check Now'}
+                </Button>
+              </TableToolbar.Item>
             </TableToolbar>
             <Table.Content />
           </Table>
