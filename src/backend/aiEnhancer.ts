@@ -228,6 +228,12 @@ export async function applyEnhancementsToWix(
         });
         continue;
       }
+    } catch (error: any) {
+      results.push({
+        productId: update.productId,
+        success: false,
+        error: error?.message ?? JSON.stringify(error)?.slice(0, 400) ?? 'Unknown error',
+      });
     }
   }
 
