@@ -141,5 +141,6 @@ export interface FlattenedProduct {
   variant?: WixVariant;
   parentId: string;
   itemId: string;
+  sku?: string;
   isMultiVariant: boolean;
 }

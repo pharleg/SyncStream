@@ -57,6 +57,21 @@ export function validateGmc(
   const offerErr = requiredString(product.offerId, 'offerId', productId);
   if (offerErr) errors.push(offerErr);
 
+  // SKU warning: fallback IDs (UUIDs or underscore-joined) suggest no SKU was set
+  if (product.offerId) {
+    const looksLikeFallback = product.offerId.includes('_') ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-/.test(product.offerId);
+    if (looksLikeFallback) {
+      errors.push({
+        field: 'offerId',
+        platform: 'gmc',
+        message: 'No SKU set — using generated fallback ID. Set a SKU on this product/variant for stable GMC tracking.',
+        productId,
+        severity: 'warning',
+      });
+    }
+  }
+
   // Availability must be uppercase enum
   if (!['IN_STOCK', 'OUT_OF_STOCK', 'PREORDER', 'BACKORDER'].includes(attrs.availability)) {
     errors.push({

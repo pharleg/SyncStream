@@ -213,6 +213,7 @@ export function flattenVariants(product: WixProduct): FlattenedProduct[] {
       variant: variants[0],
       parentId,
       itemId: variants[0]?._id ?? variants[0]?.id ?? parentId,
+      sku: variants[0]?.sku || undefined,
       isMultiVariant: false,
     }];
   }
@@ -222,6 +223,7 @@ export function flattenVariants(product: WixProduct): FlattenedProduct[] {
     variant,
     parentId,
     itemId: variant._id ?? variant.id,
+    sku: variant.sku || undefined,
     isMultiVariant: true,
   }));
 }
@@ -290,8 +292,15 @@ export function mapFlattenedToGmc(
   if (googleProductCategory) productAttributes.googleProductCategory = googleProductCategory;
   if (additionalImageLinks.length > 0) productAttributes.additionalImageLinks = additionalImageLinks;
 
+  // SKU-first ID: use SKU if present, otherwise fallback to parentId_variantId
+  const offerId = item.sku
+    ? item.sku
+    : item.isMultiVariant
+      ? `${item.parentId}_${item.itemId}`
+      : item.itemId;
+
   return {
-    offerId: item.itemId,
+    offerId,
     contentLanguage: 'en',
     feedLabel: 'US',
     productAttributes,
