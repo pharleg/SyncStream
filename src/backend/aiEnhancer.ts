@@ -208,17 +208,26 @@ export async function applyEnhancementsToWix(
       }
 
       // V3 SDK: description is RichContent type, use plainDescription for string updates
-      await productsV3.updateProduct(update.productId, {
+      const updatePayload = {
         revision,
         name: update.title,
         plainDescription: update.description,
-      } as any);
-    } catch (error) {
-      results.push({
-        productId: update.productId,
-        success: false,
-        error: error instanceof Error ? error.message : JSON.stringify(error),
-      });
+      };
+
+      try {
+        await productsV3.updateProduct(update.productId, updatePayload as any);
+      } catch (updateErr: any) {
+        const errMsg = updateErr?.message
+          ?? updateErr?.details?.message
+          ?? JSON.stringify(updateErr)?.slice(0, 400)
+          ?? 'Unknown updateProduct error';
+        results.push({
+          productId: update.productId,
+          success: false,
+          error: `updateProduct failed (rev=${revision}): ${errMsg}`,
+        });
+        continue;
+      }
     }
   }
 
