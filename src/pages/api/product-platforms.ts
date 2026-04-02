@@ -1,8 +1,9 @@
+import type { APIRoute } from 'astro';
 import { getProductPlatforms, setProductPlatforms } from '../../backend/dataService';
 
 /** GET: query platforms for a product. POST: set platforms for one or more products. */
-export async function GET(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+export const GET: APIRoute = async ({ request }) => {
+  const url = new URL(request.url);
   const productId = url.searchParams.get('productId');
   if (!productId) {
     return new Response(JSON.stringify({ error: 'productId required' }), {
@@ -14,11 +15,11 @@ export async function GET(req: Request): Promise<Response> {
   return new Response(JSON.stringify({ productId, platforms }), {
     headers: { 'Content-Type': 'application/json' },
   });
-}
+};
 
-export async function POST(req: Request): Promise<Response> {
+export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await req.json();
+    const body = await request.json();
     const productIds: string[] = body.productIds;
     const platforms: ('gmc' | 'meta')[] | null = body.platforms;
 
@@ -50,4 +51,4 @@ export async function POST(req: Request): Promise<Response> {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }
-}
+};

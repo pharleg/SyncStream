@@ -1,10 +1,11 @@
+import type { APIRoute } from 'astro';
 import { getCachedProducts, getCachedProductsByIds } from '../../backend/dataService';
 import { runComplianceCheck } from '../../backend/validator';
 import type { WixProduct } from '../../types/wix.types';
 
-export async function POST(req: Request): Promise<Response> {
+export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await req.json();
+    const body = await request.json();
     const instanceId: string = body.instanceId ?? 'default';
     const platform: 'gmc' | 'meta' = body.platform ?? 'gmc';
     const productIds: string[] | undefined = body.productIds;
