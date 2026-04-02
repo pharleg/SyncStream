@@ -1431,7 +1431,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
   useEffect(() => {
     import('@wix/app-management').then(({ appInstances }) =>
       appInstances.getAppInstance().then((res) => {
-        setAppVersion(res.instance?.appVersion ?? '');
+        setAppVersion((res.instance?.appVersion ?? '').replace(/^\^/, ''));
       }),
     ).catch(() => {});
   }, []);
