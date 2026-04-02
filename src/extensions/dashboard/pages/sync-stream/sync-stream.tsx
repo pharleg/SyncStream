@@ -792,7 +792,15 @@ const ProductsTab: FC = () => {
     compliantCount: number;
     warningCount: number;
     errorCount: number;
+    results: Array<{
+      productId: string;
+      offerId: string;
+      errors: Array<{ field: string; message: string; severity: string }>;
+      warnings: Array<{ field: string; message: string; severity: string }>;
+      compliant: boolean;
+    }>;
   } | null>(null);
+  const [expandedCompliance, setExpandedCompliance] = useState<string | null>(null);
 
   const [productPlatforms, setProductPlatforms] = useState<Map<string, ('gmc' | 'meta')[] | null>>(new Map());
 
@@ -1187,11 +1195,42 @@ const ProductsTab: FC = () => {
             </Badge>
           } />
           <Card.Content>
-            <Box direction="horizontal" gap="24px">
-              <Text size="small">{compliance.compliantCount} compliant</Text>
-              <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
-              <Text size="small" skin="error">{compliance.errorCount} errors</Text>
-              <Text size="small" secondary>of {compliance.totalProducts} products</Text>
+            <Box direction="vertical" gap="12px">
+              <Box direction="horizontal" gap="24px">
+                <Text size="small">{compliance.compliantCount} compliant</Text>
+                <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
+                <Text size="small" skin="error">{compliance.errorCount} errors</Text>
+                <Text size="small" secondary>of {compliance.totalProducts} products</Text>
+              </Box>
+              {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
+                const product = filteredProducts.find((p) => p.productId === r.productId);
+                const isExpanded = expandedCompliance === r.productId;
+                return (
+                  <Box key={r.productId} direction="vertical" gap="4px" padding="8px" style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, cursor: 'pointer' } as any} onClick={() => setExpandedCompliance(isExpanded ? null : r.productId)}>
+                    <Box direction="horizontal" gap="8px" verticalAlign="middle">
+                      <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
+                        {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
+                      </Badge>
+                      <Text size="small" weight="bold">{product?.name ?? r.productId.slice(0, 12)}</Text>
+                      <Text size="tiny" secondary>ID: {r.offerId}</Text>
+                    </Box>
+                    {isExpanded && (
+                      <Box direction="vertical" gap="4px" paddingLeft="12px" marginTop="4px">
+                        {r.errors.map((e, i) => (
+                          <Text key={`e${i}`} size="tiny" skin="error">
+                            {e.field}: {e.message}
+                          </Text>
+                        ))}
+                        {r.warnings.map((w, i) => (
+                          <Text key={`w${i}`} size="tiny" skin="standard">
+                            {w.field}: {w.message}
+                          </Text>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
             </Box>
           </Card.Content>
         </Card>
