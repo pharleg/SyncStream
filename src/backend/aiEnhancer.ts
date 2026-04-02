@@ -199,14 +199,15 @@ export async function applyEnhancementsToWix(
   for (const update of productUpdates) {
     try {
       // Must fetch current product to get revision (required by V3 API)
-      const response = await productsV3.getProduct(update.productId);
-      // SDK may return product directly or wrapped in { product: ... }
-      const current = (response as any)?.product ?? response;
-      const revision = current?.revision ?? current?._revision;
-      console.log('[SyncStream] updateProduct revision:', revision, 'responseKeys:', Object.keys(response ?? {}), 'productKeys:', Object.keys(current ?? {}));
+      const response = await productsV3.getProduct(update.productId) as any;
+      // Debug: capture the shape of the response
+      const responseKeys = Object.keys(response ?? {}).join(', ');
+      const revision = response?.revision ?? response?.product?.revision ?? response?._revision;
 
       if (!revision) {
-        results.push({ productId: update.productId, success: false, error: `Could not get product revision. Keys: ${Object.keys(current ?? {}).join(', ')}` });
+        // Return debug info so we can see the actual response shape
+        const sample = JSON.stringify(response, null, 0)?.slice(0, 300);
+        results.push({ productId: update.productId, success: false, error: `No revision found. Keys: [${responseKeys}]. Sample: ${sample}` });
         continue;
       }
 
@@ -219,7 +220,6 @@ export async function applyEnhancementsToWix(
       });
       results.push({ productId: update.productId, success: true });
     } catch (error) {
-      console.error('[SyncStream] updateProduct error:', error);
       results.push({
         productId: update.productId,
         success: false,
