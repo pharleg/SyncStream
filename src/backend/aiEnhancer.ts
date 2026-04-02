@@ -198,16 +198,22 @@ export async function applyEnhancementsToWix(
 
   for (const update of productUpdates) {
     try {
-      // DEBUG: Return the getProduct response shape so we can find revision
+      // Fetch current product to get revision (required by V3 API)
       const current = await productsV3.getProduct(update.productId) as any;
-      const sample = JSON.stringify(current, (key, val) => {
-        // Truncate long values to keep response small
-        if (typeof val === 'string' && val.length > 50) return val.slice(0, 50) + '...';
-        if (Array.isArray(val) && val.length > 2) return [val[0], `...(${val.length} items)`];
-        return val;
-      }).slice(0, 800);
-      results.push({ productId: update.productId, success: false, error: `DEBUG getProduct shape: ${sample}` });
-      continue;
+      const revision = current?.revision;
+
+      if (!revision) {
+        results.push({ productId: update.productId, success: false, error: 'Could not get product revision' });
+        continue;
+      }
+
+      // V3 SDK signature: updateProduct(id, product, options)
+      // product is the second positional arg, NOT wrapped in { product: ... }
+      await productsV3.updateProduct(update.productId, {
+        revision,
+        name: update.title,
+        description: update.description,
+      } as any);
     } catch (error) {
       results.push({
         productId: update.productId,
