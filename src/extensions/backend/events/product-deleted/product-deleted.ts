@@ -39,6 +39,7 @@ export default products.onProductDeleted(async (event) => {
           platform: 'gmc',
           message: error instanceof Error ? error.message : 'Delete failed',
           productId,
+          severity: 'error',
         }],
         externalId: '',
       };
