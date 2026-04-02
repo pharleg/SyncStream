@@ -1139,8 +1139,16 @@ const ProductsTab: FC = () => {
               },
               {
                 title: 'Image',
-                render: (row: CachedProductRow) =>
-                  row.imageUrl ? <img src={row.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} /> : <Box width="40px" height="40px" />,
+                render: (row: CachedProductRow) => (
+                  row.imageUrl
+                    ? <img
+                        src={row.imageUrl}
+                        alt={row.name ?? ''}
+                        style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                        title="Image being synced to GMC/Meta"
+                      />
+                    : <Box width="40px" height="40px" />
+                ),
                 width: '60px',
               },
               {
