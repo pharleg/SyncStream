@@ -794,6 +794,8 @@ const ProductsTab: FC = () => {
     errorCount: number;
   } | null>(null);
 
+  const [productPlatforms, setProductPlatforms] = useState<Map<string, ('gmc' | 'meta')[] | null>>(new Map());
+
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
@@ -975,6 +977,31 @@ const ProductsTab: FC = () => {
       setError(err instanceof Error ? err.message : 'Compliance check failed');
     } finally { setComplianceLoading(false); }
   }, [selected, filteredProducts]);
+
+  const handlePlatformToggle = useCallback(async (productIds: string[], platform: 'gmc' | 'meta', enabled: boolean) => {
+    for (const id of productIds) {
+      const current = productPlatforms.get(id) ?? ['gmc', 'meta'];
+      const updated = enabled
+        ? [...new Set([...current, platform])]
+        : current.filter((p) => p !== platform);
+      const finalPlatforms = updated.length === 2 ? null : updated as ('gmc' | 'meta')[];
+
+      try {
+        await appFetch('/api/product-platforms', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ productIds: [id], platforms: finalPlatforms }),
+        });
+        setProductPlatforms((prev) => {
+          const next = new Map(prev);
+          next.set(id, finalPlatforms);
+          return next;
+        });
+      } catch {
+        setError('Failed to update platform targeting');
+      }
+    }
+  }, [productPlatforms]);
 
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
@@ -1251,6 +1278,31 @@ const ProductsTab: FC = () => {
                 width: '18%',
               },
               {
+                title: 'Platforms',
+                render: (row: CachedProductRow) => {
+                  const platforms = productPlatforms.get(row.productId) ?? ['gmc', 'meta'];
+                  return (
+                    <Box direction="horizontal" gap="4px">
+                      <Badge
+                        size="small"
+                        skin={platforms.includes('gmc') ? 'success' : 'neutral'}
+                        onClick={() => handlePlatformToggle([row.productId], 'gmc', !platforms.includes('gmc'))}
+                      >
+                        GMC
+                      </Badge>
+                      <Badge
+                        size="small"
+                        skin={platforms.includes('meta') ? 'success' : 'neutral'}
+                        onClick={() => handlePlatformToggle([row.productId], 'meta', !platforms.includes('meta'))}
+                      >
+                        Meta
+                      </Badge>
+                    </Box>
+                  );
+                },
+                width: '120px',
+              },
+              {
                 title: 'Sync',
                 render: (row: CachedProductRow) => {
                   if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
@@ -1279,6 +1331,30 @@ const ProductsTab: FC = () => {
                   {complianceLoading ? 'Checking...' : 'Check Now'}
                 </Button>
               </TableToolbar.Item>
+              {selected.size > 0 && (
+                <TableToolbar.Item>
+                  <Dropdown
+                    size="small"
+                    placeholder="Set platforms..."
+                    options={[
+                      { id: 'all', value: 'All platforms' },
+                      { id: 'gmc', value: 'GMC only' },
+                      { id: 'meta', value: 'Meta only' },
+                    ]}
+                    onSelect={(option: any) => {
+                      const ids = Array.from(selected);
+                      const platforms: ('gmc' | 'meta')[] | null = option.id === 'all' ? null
+                        : option.id === 'gmc' ? ['gmc']
+                        : ['meta'];
+                      // Update all selected products
+                      ids.forEach((id) => {
+                        const enabled = platforms === null || platforms.includes('gmc');
+                        handlePlatformToggle([id], 'gmc', enabled);
+                      });
+                    }}
+                  />
+                </TableToolbar.Item>
+              )}
             </TableToolbar>
             <Table.Content />
           </Table>
