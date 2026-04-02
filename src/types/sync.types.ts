@@ -38,3 +38,20 @@ export interface SyncProgress {
 export interface PaginatedSyncResult extends BatchSyncResult {
   progress: SyncProgress;
 }
+
+export interface ProductComplianceResult {
+  productId: string;
+  offerId: string;
+  errors: import('./wix.types').ValidationError[];
+  warnings: import('./wix.types').ValidationError[];
+  compliant: boolean;
+}
+
+export interface ComplianceSummary {
+  totalProducts: number;
+  compliantCount: number;
+  warningCount: number;
+  errorCount: number;
+  healthScore: number;
+  results: ProductComplianceResult[];
+}

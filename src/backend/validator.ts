@@ -6,9 +6,14 @@
  * A batch does NOT abort for one bad product.
  */
 
-import type { ValidationError } from '../types/wix.types';
+import type { ValidationError, FieldMappings } from '../types/wix.types';
 import type { GmcProductInput } from '../types/gmc.types';
 import type { MetaProduct } from '../types/meta.types';
+import type { ProductComplianceResult, ComplianceSummary } from '../types/sync.types';
+import { flattenVariants, mapFlattenedToGmc } from './productMapper';
+import { applyRules } from './rulesEngine';
+import { getRules, getFilters, getAppConfig } from './dataService';
+import { applyFilters } from './filterEngine';
 
 function requiredString(
   value: string | undefined,
@@ -160,4 +165,57 @@ export function validateMeta(
 ): ValidationError[] {
   // TODO Phase 4: implement Meta validation
   return [];
+}
+
+/**
+ * Run compliance validation on products without triggering a sync.
+ * Returns per-product results and an overall health score.
+ */
+export async function runComplianceCheck(
+  instanceId: string,
+  products: import('../types/wix.types').WixProduct[],
+  platform: 'gmc' | 'meta' = 'gmc',
+): Promise<ComplianceSummary> {
+  const config = await getAppConfig(instanceId);
+  const mappings = config?.fieldMappings ?? {};
+  const siteUrl = mappings['siteUrl']?.defaultValue ?? '';
+  const filters = await getFilters(instanceId, platform);
+  const filtered = applyFilters(products, filters, platform);
+  const flattened = filtered.flatMap((p) => flattenVariants(p));
+  const rules = await getRules(instanceId, platform);
+
+  const results: ProductComplianceResult[] = [];
+
+  for (const item of flattened) {
+    if (platform === 'gmc') {
+      const gmcProduct = mapFlattenedToGmc(item, mappings, siteUrl);
+      const transformed = applyRules([gmcProduct], rules, platform);
+      const allIssues = validateGmc(transformed[0], transformed[0].offerId);
+      const errors = allIssues.filter((e) => e.severity === 'error');
+      const warnings = allIssues.filter((e) => e.severity === 'warning');
+      results.push({
+        productId: item.product._id ?? item.product.id,
+        offerId: transformed[0].offerId,
+        errors,
+        warnings,
+        compliant: errors.length === 0,
+      });
+    }
+  }
+
+  const compliantCount = results.filter((r) => r.compliant).length;
+  const warningCount = results.filter((r) => r.warnings.length > 0).length;
+  const errorCount = results.filter((r) => !r.compliant).length;
+  const healthScore = results.length > 0
+    ? Math.round((compliantCount / results.length) * 100)
+    : 100;
+
+  return {
+    totalProducts: results.length,
+    compliantCount,
+    warningCount,
+    errorCount,
+    healthScore,
+    results,
+  };
 }
