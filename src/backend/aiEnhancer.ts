@@ -203,23 +203,32 @@ export async function applyEnhancementsToWix(
       const revision = current?.revision;
 
       if (!revision) {
-        results.push({ productId: update.productId, success: false, error: 'Could not get product revision' });
+        results.push({ productId: update.productId, success: false, error: `Could not get product revision. Got: ${JSON.stringify(Object.keys(current ?? {})).slice(0, 200)}` });
         continue;
       }
 
-      // V3 SDK: description is RichContent type, use plainDescription for string updates
+      // V3 plainDescription requires valid HTML — wrap plain text in <p> tags
+      const htmlDescription = update.description.startsWith('<')
+        ? update.description
+        : update.description
+            .split('\n\n')
+            .filter(Boolean)
+            .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+            .join('');
+
       const updatePayload = {
         revision,
         name: update.title,
-        plainDescription: update.description,
+        plainDescription: htmlDescription,
       };
 
       try {
         await productsV3.updateProduct(update.productId, updatePayload as any);
+        results.push({ productId: update.productId, success: true });
       } catch (updateErr: any) {
         const errMsg = updateErr?.message
           ?? updateErr?.details?.message
-          ?? JSON.stringify(updateErr)?.slice(0, 400)
+          ?? (typeof updateErr === 'object' ? JSON.stringify(updateErr).slice(0, 500) : String(updateErr))
           ?? 'Unknown updateProduct error';
         results.push({
           productId: update.productId,
@@ -229,10 +238,13 @@ export async function applyEnhancementsToWix(
         continue;
       }
     } catch (error: any) {
+      const errMsg = error?.message
+        ?? (typeof error === 'object' ? JSON.stringify(error).slice(0, 500) : String(error))
+        ?? 'Unknown error';
       results.push({
         productId: update.productId,
         success: false,
-        error: error?.message ?? JSON.stringify(error)?.slice(0, 400) ?? 'Unknown error',
+        error: errMsg,
       });
     }
   }
