@@ -198,8 +198,17 @@ export async function applyEnhancementsToWix(
 
   for (const update of productUpdates) {
     try {
+      // Must fetch current product to get revision (required by V3 API)
+      const current = await productsV3.getProduct(update.productId);
+      const revision = (current as any)?.revision ?? (current as any)?._revision;
+      if (!revision) {
+        results.push({ productId: update.productId, success: false, error: 'Could not get product revision' });
+        continue;
+      }
+
       await productsV3.updateProduct(update.productId, {
         product: {
+          revision,
           name: update.title,
           description: update.description,
         },
