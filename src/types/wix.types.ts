@@ -132,6 +132,7 @@ export interface ValidationError {
   platform: 'gmc' | 'meta';
   message: string;
   productId: string;
+  severity: 'error' | 'warning';
 }
 
 /** A product flattened to a single variant for pipeline processing. */

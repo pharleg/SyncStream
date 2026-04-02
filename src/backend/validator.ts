@@ -14,6 +14,7 @@ function requiredString(
   value: string | undefined,
   field: string,
   productId: string,
+  severity: 'error' | 'warning' = 'error',
 ): ValidationError | null {
   if (!value || value.trim().length === 0) {
     return {
@@ -21,6 +22,7 @@ function requiredString(
       platform: 'gmc',
       message: `${field} is required and must not be empty`,
       productId,
+      severity,
     };
   }
   return null;
@@ -62,6 +64,7 @@ export function validateGmc(
       platform: 'gmc',
       message: `availability must be "IN_STOCK", "OUT_OF_STOCK", "PREORDER", or "BACKORDER", got "${attrs.availability}"`,
       productId,
+      severity: 'error',
     });
   }
 
@@ -72,6 +75,7 @@ export function validateGmc(
       platform: 'gmc',
       message: `condition must be "NEW", "USED", or "REFURBISHED", got "${attrs.condition}"`,
       productId,
+      severity: 'error',
     });
   }
 
@@ -84,6 +88,7 @@ export function validateGmc(
       platform: 'gmc',
       message: `price.amountMicros must be a positive integer string, got "${micros}"`,
       productId,
+      severity: 'error',
     });
   }
 
@@ -94,6 +99,7 @@ export function validateGmc(
       platform: 'gmc',
       message: 'price.currencyCode is required',
       productId,
+      severity: 'error',
     });
   }
 
@@ -104,6 +110,7 @@ export function validateGmc(
       platform: 'gmc',
       message: `description exceeds 5000 character limit (${attrs.description.length} chars)`,
       productId,
+      severity: 'error',
     });
   }
 
@@ -114,6 +121,7 @@ export function validateGmc(
       platform: 'gmc',
       message: 'link must be a valid URL starting with http',
       productId,
+      severity: 'error',
     });
   }
 
@@ -124,6 +132,7 @@ export function validateGmc(
       platform: 'gmc',
       message: 'imageLink must be a valid URL starting with http',
       productId,
+      severity: 'error',
     });
   }
 
