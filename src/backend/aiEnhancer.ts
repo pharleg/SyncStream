@@ -207,13 +207,14 @@ export async function applyEnhancementsToWix(
         continue;
       }
 
-      // V3 SDK signature: updateProduct(id, product, options)
-      // product is the second positional arg, NOT wrapped in { product: ... }
-      await productsV3.updateProduct(update.productId, {
-        revision,
-        name: update.title,
-        description: update.description,
-      } as any);
+      // V3 SDK: updateProduct(id, { product: { revision, ...fields } })
+      await (productsV3 as any).updateProduct(update.productId, {
+        product: {
+          revision,
+          name: update.title,
+          description: update.description,
+        },
+      });
     } catch (error) {
       results.push({
         productId: update.productId,
