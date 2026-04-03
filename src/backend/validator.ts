@@ -123,6 +123,25 @@ export function validateGmc(
     });
   }
 
+  // Description quality warnings
+  if (attrs.description && attrs.description === attrs.title) {
+    errors.push({
+      field: 'description',
+      platform: 'gmc',
+      message: 'Description is identical to title — product has no real description. Add a description for better feed quality.',
+      productId,
+      severity: 'warning',
+    });
+  } else if (attrs.description && attrs.description.length < 50 && attrs.description !== attrs.title) {
+    errors.push({
+      field: 'description',
+      platform: 'gmc',
+      message: `Description is very short (${attrs.description.length} chars). GMC recommends at least 150 characters.`,
+      productId,
+      severity: 'warning',
+    });
+  }
+
   // Description max 5000 chars
   if (attrs.description && attrs.description.length > 5000) {
     errors.push({
