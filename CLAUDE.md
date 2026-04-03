@@ -144,6 +144,44 @@ Phase 6: Error UX polish, manual sync trigger, App Market listing, billing
 
 Phase 2 is a shippable GMC-only MVP. You can stop there and release.
 
+## Post-Architecture Feature Decisions
+
+### SKU Handling
+- If SKU present on product/variant, use it as the GMC `id`
+- If SKU absent, generate stable fallback: `parentId_variantId`
+- Surface missing SKUs in Sync Status dashboard as a warning-level flag (not a blocker)
+- `validator.ts` handles this as a warning, not an error
+
+### Compliance Checks (Phase 3)
+- Expose validator output as a standalone compliance feature, not just a pre-push side effect
+- Merchant can trigger "Check Now" without initiating a sync
+- Feed health score: % of catalog compliant per platform, surfaced on dashboard
+- Implementation: read SyncState + re-run validator on current catalog snapshot --
+  no GMC/Meta API calls required
+
+### Per-Product Platform Targeting
+- Merchant can select which platforms each product syncs to: All, GMC only, Meta only
+- `SyncState` gets a `platforms` field (string array, e.g. `['gmc', 'meta']`)
+- Default is all connected platforms
+- `webhookHandler` and `syncService` check `platforms` before pushing to any platform
+- Deselecting a platform stops future syncs; no delete call required --
+  GMC expires stale products ~24hrs, Meta ~30 days
+- UI: toggles per product on the Sync Status page, with bulk selection support
+
+### Product Images in Workbench
+- Surface product images alongside sync/compliance data in the product workbench
+- Merchant can visually verify the image being pushed to GMC/Meta before or after sync
+- Pull from `product.media.mainMedia.image.url` (already a mapped field)
+
+### Compliance Fix Staging (added Apr 2)
+- Compliance issues with fixable fields (brand, description, title, condition, link,
+  imageLink, offerId/SKU) show a "Fix" button in the workbench
+- Merchant enters corrected value → staged locally → pending fixes banner appears
+- "Apply to Wix" writes fixes back to Wix products
+- "Apply to GMC" applies as overrides for next sync
+- "Apply to Both" does both
+- Tab change warning if uncommitted fixes exist
+
 ## Wix Docs
 Wix CLI docs are available in machine-readable format.
 Append .md to any docs URL at dev.wix.com to get the Markdown version.
