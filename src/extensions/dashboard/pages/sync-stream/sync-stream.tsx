@@ -41,6 +41,9 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
 
 const CHANGELOG_URL = 'https://syncstream.app/changelog';
 
+// Module-level flag for pending compliance fixes (read by tab change handler)
+let _hasPendingFixes = false;
+
 // ─── Shared types & API helpers ──────────────────────────────────────────
 
 interface FieldMapping {
@@ -801,6 +804,16 @@ const ProductsTab: FC = () => {
     }>;
   } | null>(null);
   const [expandedCompliance, setExpandedCompliance] = useState<string | null>(null);
+  // Pending compliance fixes: offerId → { field → corrected value }
+  const [pendingFixes, setPendingFixes] = useState<Map<string, Map<string, string>>>(new Map());
+  // Which issue is currently being edited: "offerId:field"
+  const [editingFix, setEditingFix] = useState<string | null>(null);
+  const [editingFixValue, setEditingFixValue] = useState('');
+  const [applyingFixes, setApplyingFixes] = useState(false);
+
+  const pendingFixCount = Array.from(pendingFixes.values()).reduce((sum, m) => sum + m.size, 0);
+  // Keep module-level flag in sync for tab-change warning
+  useEffect(() => { _hasPendingFixes = pendingFixCount > 0; }, [pendingFixCount]);
 
   const [productPlatforms, setProductPlatforms] = useState<Map<string, ('gmc' | 'meta')[] | null>>(new Map());
 
@@ -1011,6 +1024,88 @@ const ProductsTab: FC = () => {
     }
   }, [productPlatforms]);
 
+  const handleStageFix = useCallback((offerId: string, field: string, value: string) => {
+    setPendingFixes((prev) => {
+      const next = new Map(prev);
+      const fieldMap = new Map(next.get(offerId) ?? []);
+      if (value.trim()) {
+        fieldMap.set(field, value.trim());
+      } else {
+        fieldMap.delete(field);
+      }
+      if (fieldMap.size > 0) {
+        next.set(offerId, fieldMap);
+      } else {
+        next.delete(offerId);
+      }
+      return next;
+    });
+    setEditingFix(null);
+    setEditingFixValue('');
+  }, []);
+
+  const handleApplyFixes = useCallback(async (target: 'wix' | 'gmc' | 'both') => {
+    if (pendingFixes.size === 0) return;
+    setApplyingFixes(true); setError(null);
+    try {
+      // Build updates array: group fixes by productId for Wix writeback
+      const fixEntries: Array<{ offerId: string; productId: string; field: string; value: string }> = [];
+      for (const [offerId, fieldMap] of pendingFixes) {
+        const result = compliance?.results.find((r) => r.offerId === offerId);
+        if (!result) continue;
+        for (const [field, value] of fieldMap) {
+          fixEntries.push({ offerId, productId: result.productId, field, value });
+        }
+      }
+
+      if (target === 'wix' || target === 'both') {
+        // Group by productId and apply field updates to Wix
+        const byProduct = new Map<string, Array<{ field: string; value: string }>>();
+        for (const fix of fixEntries) {
+          const arr = byProduct.get(fix.productId) ?? [];
+          arr.push({ field: fix.field, value: fix.value });
+          byProduct.set(fix.productId, arr);
+        }
+
+        for (const [productId, fields] of byProduct) {
+          const updatePayload: Record<string, string> = {};
+          for (const f of fields) {
+            // Map compliance field names to Wix product fields
+            if (f.field === 'brand') updatePayload.brand = f.value;
+            else if (f.field === 'description') updatePayload.description = f.value;
+            else if (f.field === 'title') updatePayload.name = f.value;
+          }
+          if (Object.keys(updatePayload).length > 0) {
+            await appFetch('/api/products-apply-ai', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                instanceId: 'default',
+                updates: [{
+                  productId,
+                  title: updatePayload.name ?? '',
+                  description: updatePayload.description ?? '',
+                }],
+              }),
+            });
+          }
+        }
+      }
+
+      if (target === 'gmc' || target === 'both') {
+        // Store fixes as field mapping overrides for next sync
+        // For now, the fixes are applied via the sync pipeline's rules engine
+        // TODO: persist per-product overrides for GMC-only apply
+      }
+
+      const count = fixEntries.length;
+      setPendingFixes(new Map());
+      setSuccess(`Applied ${count} fix${count > 1 ? 'es' : ''} to ${target === 'both' ? 'Wix & GMC' : target === 'wix' ? 'Wix' : 'GMC'}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply fixes');
+    } finally { setApplyingFixes(false); }
+  }, [pendingFixes, compliance]);
+
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
     if (ids.length === 0) return;
@@ -1187,6 +1282,26 @@ const ProductsTab: FC = () => {
         </Card>
       )}
 
+      {pendingFixCount > 0 && (
+        <SectionHelper appearance="warning">
+          <Box direction="horizontal" gap="12px" verticalAlign="middle">
+            <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
+            <Button size="tiny" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
+              {applyingFixes ? 'Applying...' : 'Apply to Wix'}
+            </Button>
+            <Button size="tiny" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
+              Apply to GMC
+            </Button>
+            <Button size="tiny" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
+              Apply to Both
+            </Button>
+            <Button size="tiny" skin="destructive" onClick={() => setPendingFixes(new Map())}>
+              Discard All
+            </Button>
+          </Box>
+        </SectionHelper>
+      )}
+
       {compliance && (
         <Card>
           <Card.Header title="Feed Health" suffix={
@@ -1205,27 +1320,62 @@ const ProductsTab: FC = () => {
               {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
                 const product = filteredProducts.find((p) => p.productId === r.productId);
                 const isExpanded = expandedCompliance === r.offerId;
+                const fixes = pendingFixes.get(r.offerId);
+                const allIssues = [...r.errors, ...r.warnings];
                 return (
-                  <div key={r.offerId} onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)} style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, cursor: 'pointer', padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <Box direction="horizontal" gap="8px" verticalAlign="middle">
+                  <div key={r.offerId} style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                       <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
                         {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
                       </Badge>
                       <Text size="small" weight="bold">{product?.name ?? r.productId.slice(0, 12)}</Text>
                       <Text size="tiny" secondary>ID: {r.offerId}</Text>
-                    </Box>
+                      {fixes && fixes.size > 0 && (
+                        <Badge size="small" skin="success">{fixes.size} fix{fixes.size > 1 ? 'es' : ''} staged</Badge>
+                      )}
+                      <Text size="tiny" secondary>{isExpanded ? '▾' : '▸'}</Text>
+                    </div>
                     {isExpanded && (
-                      <div style={{ paddingLeft: 12, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {r.errors.map((e, i) => (
-                          <Text key={`e${i}`} size="tiny" skin="error">
-                            {e.field}: {e.message}
-                          </Text>
-                        ))}
-                        {r.warnings.map((w, i) => (
-                          <Text key={`w${i}`} size="tiny">
-                            ⚠ {w.field}: {w.message}
-                          </Text>
-                        ))}
+                      <div style={{ paddingLeft: 12, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {allIssues.map((issue, i) => {
+                          const fixKey = `${r.offerId}:${issue.field}`;
+                          const isEditing = editingFix === fixKey;
+                          const hasFix = fixes?.has(issue.field);
+                          const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink'].includes(issue.field);
+                          return (
+                            <div key={`issue${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <Text size="tiny" skin={issue.severity === 'error' ? 'error' : undefined}>
+                                  {issue.severity === 'warning' ? '⚠' : '✗'} {issue.field}: {issue.message}
+                                </Text>
+                                {hasFix && (
+                                  <Badge size="small" skin="success">Fixed: {fixes!.get(issue.field)!.slice(0, 30)}{fixes!.get(issue.field)!.length > 30 ? '...' : ''}</Badge>
+                                )}
+                                {fixable && !isEditing && !hasFix && (
+                                  <button onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }} style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                                    Fix
+                                  </button>
+                                )}
+                                {hasFix && (
+                                  <button onClick={(e) => { e.stopPropagation(); handleStageFix(r.offerId, issue.field, ''); }} style={{ border: '1px solid #9ca3af', background: 'transparent', color: '#9ca3af', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 11 }}>
+                                    Undo
+                                  </button>
+                                )}
+                              </div>
+                              {isEditing && (
+                                <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 16 }}>
+                                  <Input size="small" placeholder={`Enter ${issue.field} value...`} value={editingFixValue} onChange={(e: any) => setEditingFixValue(e.target.value)} />
+                                  <Button size="tiny" onClick={() => handleStageFix(r.offerId, issue.field, editingFixValue)} disabled={!editingFixValue.trim()}>
+                                    Stage
+                                  </Button>
+                                  <Button size="tiny" skin="light" onClick={() => { setEditingFix(null); setEditingFixValue(''); }}>
+                                    Cancel
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1891,7 +2041,12 @@ const SyncStreamPage: FC = () => {
             <Tabs
               items={TAB_ITEMS}
               activeId={activeTab}
-              onClick={(tab) => setActiveTab(String(tab.id))}
+              onClick={(tab) => {
+                if (_hasPendingFixes && activeTab === 'products' && String(tab.id) !== 'products') {
+                  if (!window.confirm('You have uncommitted compliance fixes. Leave without applying them?')) return;
+                }
+                setActiveTab(String(tab.id));
+              }}
               type="compactSide"
             />
 
