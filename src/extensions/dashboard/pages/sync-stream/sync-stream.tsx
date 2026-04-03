@@ -1341,7 +1341,7 @@ const ProductsTab: FC = () => {
                           const fixKey = `${r.offerId}:${issue.field}`;
                           const isEditing = editingFix === fixKey;
                           const hasFix = fixes?.has(issue.field);
-                          const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink'].includes(issue.field);
+                          const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink', 'offerId'].includes(issue.field);
                           return (
                             <div key={`issue${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
