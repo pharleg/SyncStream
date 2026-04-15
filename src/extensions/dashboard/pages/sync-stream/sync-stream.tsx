@@ -1152,15 +1152,20 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
       let wixApplied = 0;
       let gmcSynced = 0;
 
+      // Only title/description can be written back to Wix; other fields are GMC-only overrides.
+      const wixEligibleCount = fixEntries.filter((e) => e.field === 'title' || e.field === 'description').length;
+
       if (target === 'wix' || target === 'both') {
-        const response = await appFetch('/api/compliance-apply-wix', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fixes: fixEntries }),
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error);
-        wixApplied = data.applied ?? 0;
+        if (wixEligibleCount > 0) {
+          const response = await appFetch('/api/compliance-apply-wix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fixes: fixEntries }),
+          });
+          const data = await response.json();
+          if (data.error) throw new Error(data.error);
+          wixApplied = data.applied ?? 0;
+        }
       }
 
       if (target === 'gmc' || target === 'both') {
@@ -1179,6 +1184,7 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
       setPendingFixes(new Map());
       if (target === 'wix') setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix.`);
       else if (target === 'gmc') setSuccess(`Applied to GMC — ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} re-synced.`);
+      else if (wixEligibleCount === 0) setSuccess(`Re-synced ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} to GMC.`);
       else setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix and re-synced ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} to GMC.`);
 
       if (target === 'wix' || target === 'both') await loadProducts();
@@ -2258,11 +2264,6 @@ const SyncStreamPage: FC = () => {
 
   useEffect(() => {
     loadConfig();
-    // Debug: log mapped product + config
-    appFetch('/api/debug-sync')
-      .then((r) => r.json())
-      .then((data) => console.log('[SyncStream] DEBUG sync:', JSON.stringify(data, null, 2)))
-      .catch((e) => console.error('[SyncStream] DEBUG error:', e));
   }, [loadConfig]);
 
   if (loading) {

@@ -48,7 +48,7 @@ export const POST: APIRoute = async ({ request }) => {
       if (result.success) {
         const update = updates.find((u) => u.productId === result.productId);
         if (update) {
-          const cacheUpdates: Record<string, string> = {};
+          const cacheUpdates: { name?: string; description?: string; plainDescription?: string } = {};
           if (update.title) { cacheUpdates.name = update.title; }
           if (update.description) {
             cacheUpdates.description = update.description;
