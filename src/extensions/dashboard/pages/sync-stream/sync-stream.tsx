@@ -1061,63 +1061,58 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
     if (pendingFixes.size === 0) return;
     setApplyingFixes(true); setError(null);
     try {
-      // Build updates array: group fixes by productId for Wix writeback
-      const fixEntries: Array<{ offerId: string; productId: string; field: string; value: string }> = [];
+      // Flatten all staged fixes into a list of { productId, field, value }
+      const fixEntries: Array<{ productId: string; field: string; value: string }> = [];
       for (const [offerId, fieldMap] of pendingFixes) {
         const result = compliance?.results.find((r) => r.offerId === offerId);
         if (!result) continue;
         for (const [field, value] of fieldMap) {
-          fixEntries.push({ offerId, productId: result.productId, field, value });
+          fixEntries.push({ productId: result.productId, field, value });
         }
       }
 
-      if (target === 'wix' || target === 'both') {
-        // Group by productId and apply field updates to Wix
-        const byProduct = new Map<string, Array<{ field: string; value: string }>>();
-        for (const fix of fixEntries) {
-          const arr = byProduct.get(fix.productId) ?? [];
-          arr.push({ field: fix.field, value: fix.value });
-          byProduct.set(fix.productId, arr);
-        }
+      if (fixEntries.length === 0) {
+        setPendingFixes(new Map());
+        return;
+      }
 
-        for (const [productId, fields] of byProduct) {
-          const updatePayload: Record<string, string> = {};
-          for (const f of fields) {
-            // Map compliance field names to Wix product fields
-            if (f.field === 'brand') updatePayload.brand = f.value;
-            else if (f.field === 'description') updatePayload.description = f.value;
-            else if (f.field === 'title') updatePayload.name = f.value;
-          }
-          if (Object.keys(updatePayload).length > 0) {
-            await appFetch('/api/products-apply-ai', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                instanceId: 'default',
-                updates: [{
-                  productId,
-                  title: updatePayload.name ?? '',
-                  description: updatePayload.description ?? '',
-                }],
-              }),
-            });
-          }
-        }
+      let wixApplied = 0;
+      let gmcSynced = 0;
+
+      if (target === 'wix' || target === 'both') {
+        const response = await appFetch('/api/compliance-apply-wix', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fixes: fixEntries }),
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        wixApplied = data.applied ?? 0;
       }
 
       if (target === 'gmc' || target === 'both') {
-        // Store fixes as field mapping overrides for next sync
-        // For now, the fixes are applied via the sync pipeline's rules engine
-        // TODO: persist per-product overrides for GMC-only apply
+        const response = await appFetch('/api/compliance-apply-gmc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fixes: fixEntries }),
+        });
+        const data = await response.json();
+        if (data.error) throw new Error(data.error);
+        gmcSynced = data.synced ?? 0;
+        // Reload override counts after applying (loadOverrideCounts defined in Task 9)
+        // For now, this is a no-op stub until Task 9 adds the real implementation
       }
 
-      const count = fixEntries.length;
       setPendingFixes(new Map());
-      setSuccess(`Applied ${count} fix${count > 1 ? 'es' : ''} to ${target === 'both' ? 'Wix & GMC' : target === 'wix' ? 'Wix' : 'GMC'}`);
+      if (target === 'wix') setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix.`);
+      else if (target === 'gmc') setSuccess(`Applied to GMC — ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} re-synced.`);
+      else setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix and re-synced ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} to GMC.`);
+
+      if (target === 'wix' || target === 'both') await loadProducts();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply fixes');
     } finally { setApplyingFixes(false); }
-  }, [pendingFixes, compliance]);
+  }, [pendingFixes, compliance, loadProducts]);
 
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
