@@ -32,6 +32,7 @@ import {
   getCachedProductsByIds,
   upsertSyncProgress,
   getBatchProductPlatforms,
+  getBatchGmcOverrides,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -184,6 +185,10 @@ async function syncProductChunk(
     // 3. Flatten variants
     const flattened = platformFiltered.flatMap((p) => flattenVariants(p));
 
+    // Fetch any merchant-applied GMC field overrides for this batch
+    const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
+    const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
+
     // 4. AI enhance (if enabled)
     let enhancedMap: Map<string, { title: string; description: string }> | undefined;
     if (config.aiEnhancementEnabled) {
@@ -202,6 +207,17 @@ async function syncProductChunk(
       const enhanced = enhancedMap?.get(productId);
 
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
+
+      // Apply any stored merchant overrides for this product
+      const overrides = gmcOverridesMap.get(productId);
+      if (overrides && overrides.size > 0) {
+        for (const [field, value] of overrides) {
+          if (field === 'brand') gmcProduct.productAttributes.brand = value;
+          else if (field === 'condition') gmcProduct.productAttributes.condition = value as any;
+          else if (field === 'link') gmcProduct.productAttributes.link = value;
+          else if (field === 'imageLink') gmcProduct.productAttributes.imageLink = value;
+        }
+      }
 
       // Apply rules then validate
       const transformed = applyRules([gmcProduct], rules, 'gmc');
@@ -337,6 +353,10 @@ export async function syncFromCache(
     const filtered = applyFilters(products, filters, 'gmc');
     const flattened = filtered.flatMap((p) => flattenVariants(p));
 
+    // Fetch any merchant-applied GMC field overrides for this batch
+    const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
+    const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
+
     let enhancedMap: Map<string, { title: string; description: string }> | undefined;
     if (config.aiEnhancementEnabled) {
       const uniqueProducts = [...new Map(filtered.map((p) => [p._id ?? p.id, p])).values()];
@@ -351,6 +371,17 @@ export async function syncFromCache(
       const productId = item.product._id ?? item.product.id;
       const enhanced = enhancedMap?.get(productId);
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
+
+      // Apply any stored merchant overrides for this product
+      const overrides = gmcOverridesMap.get(productId);
+      if (overrides && overrides.size > 0) {
+        for (const [field, value] of overrides) {
+          if (field === 'brand') gmcProduct.productAttributes.brand = value;
+          else if (field === 'condition') gmcProduct.productAttributes.condition = value as any;
+          else if (field === 'link') gmcProduct.productAttributes.link = value;
+          else if (field === 'imageLink') gmcProduct.productAttributes.imageLink = value;
+        }
+      }
       const transformed = applyRules([gmcProduct], rules, 'gmc');
       const errors = validateGmc(transformed[0], transformed[0].offerId);
 
