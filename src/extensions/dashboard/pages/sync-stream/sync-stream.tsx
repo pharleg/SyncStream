@@ -828,6 +828,18 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
   const [overrideDetails, setOverrideDetails] = useState<Map<string, Record<string, string>>>(new Map());
   const [openOverridePopover, setOpenOverridePopover] = useState<string | null>(null);
 
+  const [aiStyle, setAiStyle] = useState(_config?.aiEnhancementStyle ?? '');
+  const [savingAiStyle, setSavingAiStyle] = useState(false);
+
+  const handleSaveAiStyle = useCallback(async (value: string) => {
+    setSavingAiStyle(true);
+    try {
+      await saveAppConfig({ aiEnhancementStyle: value });
+      await _onConfigRefresh();
+    } catch { /* silent */ }
+    finally { setSavingAiStyle(false); }
+  }, [_onConfigRefresh]);
+
   const loadOverrideCounts = useCallback(async () => {
     if (products.length === 0) return;
     const ids = products.map((p) => p.productId).join(',');
@@ -1653,6 +1665,41 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
 
       {productsSubTab === 'ai' && (
         <Box direction="vertical" gap="18px">
+          {/* AI Enhancement Settings */}
+          <Card>
+            <Card.Header
+              title="AI Enhancement Settings"
+              subtitle="Customize how Claude writes descriptions for your products"
+            />
+            <Card.Divider />
+            <Card.Content>
+              <Box direction="vertical" gap="12px">
+                <Box verticalAlign="middle" gap="12px">
+                  <ToggleSwitch
+                    size="small"
+                    checked={_config?.aiEnhancementEnabled ?? false}
+                    onChange={async () => {
+                      const newVal = !(_config?.aiEnhancementEnabled ?? false);
+                      await saveAppConfig({ aiEnhancementEnabled: newVal });
+                      await _onConfigRefresh();
+                    }}
+                  />
+                  <Text size="small">{_config?.aiEnhancementEnabled ? 'AI Enhancement Enabled' : 'AI Enhancement Disabled'}</Text>
+                </Box>
+                <FormField label="Style / Tone (optional)" infoContent="Describe the tone you want. e.g. 'professional and concise' or 'friendly and casual'">
+                  <Input
+                    size="small"
+                    value={aiStyle}
+                    onChange={(e) => setAiStyle(e.target.value)}
+                    onBlur={() => handleSaveAiStyle(aiStyle)}
+                    placeholder="e.g., professional and concise"
+                    disabled={savingAiStyle}
+                  />
+                </FormField>
+              </Box>
+            </Card.Content>
+          </Card>
+
           {/* AI toolbar */}
           <Box gap="12px" verticalAlign="middle">
             <Button size="small" onClick={handleEnhanceAndPreview} disabled={aiPreviewLoading || filteredProducts.length === 0}>
@@ -1682,7 +1729,7 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
               />
               <Card.Divider />
               <Card.Content>
-                <Box direction="vertical" gap="12px" maxHeight="600px" overflowY="auto">
+                <Box direction="vertical" gap="12px" maxHeight="80vh" overflowY="auto">
                   {aiPreviews.map((preview) => (
                     <Card key={preview.productId}>
                       <Card.Content>
@@ -1705,22 +1752,22 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                           <Box direction="vertical" gap="6px" width="100%">
                             <Box gap="12px">
                               <Box direction="vertical" width="50%">
-                                <Text size="tiny" weight="bold" secondary>Original Title</Text>
+                                <Text size="small" weight="bold" secondary>Original Title</Text>
                                 <Text size="small">{preview.original.title}</Text>
                               </Box>
                               <Box direction="vertical" width="50%">
-                                <Text size="tiny" weight="bold" skin="success">Enhanced Title</Text>
+                                <Text size="small" weight="bold" skin="success">Enhanced Title</Text>
                                 <Text size="small">{preview.enhanced?.title ?? '—'}</Text>
                               </Box>
                             </Box>
                             <Box gap="12px">
                               <Box direction="vertical" width="50%">
-                                <Text size="tiny" weight="bold" secondary>Original Description</Text>
-                                <Text size="tiny">{preview.original.description ?? ''}</Text>
+                                <Text size="small" weight="bold" secondary>Original Description</Text>
+                                <Text size="small">{preview.original.description ?? ''}</Text>
                               </Box>
                               <Box direction="vertical" width="50%">
-                                <Text size="tiny" weight="bold" skin="success">Enhanced Description</Text>
-                                <Text size="tiny">{preview.enhanced?.description ?? ''}</Text>
+                                <Text size="small" weight="bold" skin="success">Enhanced Description</Text>
+                                <Text size="small">{preview.enhanced?.description ?? ''}</Text>
                               </Box>
                             </Box>
                           </Box>
