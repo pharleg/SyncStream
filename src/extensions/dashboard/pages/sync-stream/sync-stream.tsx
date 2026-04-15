@@ -766,7 +766,10 @@ function applyClientFilter(
   });
 }
 
-const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => void }> = ({ config: _config, onConfigRefresh: _onConfigRefresh }) => {
+const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => void }> = ({
+  config: _config,             // used in Task 10 (Fix with AI) and Task 11 (AI sub-tab settings)
+  onConfigRefresh: _onConfigRefresh, // used in Task 11 (AI style/tone save)
+}) => {
   const [productsSubTab, setProductsSubTab] = useState('products');
   const [products, setProducts] = useState<CachedProductRow[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<CachedProductRow[]>([]);
@@ -1154,6 +1157,26 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
       {success && <SectionHelper appearance="success">{success}</SectionHelper>}
 
+      {pendingFixCount > 0 && (
+        <SectionHelper appearance="warning">
+          <Box direction="horizontal" gap="12px" verticalAlign="middle">
+            <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
+            <Button size="small" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
+              {applyingFixes ? 'Applying...' : 'Apply to Wix'}
+            </Button>
+            <Button size="small" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
+              Apply to GMC
+            </Button>
+            <Button size="small" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
+              Apply to Both
+            </Button>
+            <Button size="small" skin="destructive" onClick={() => setPendingFixes(new Map())}>
+              Discard All
+            </Button>
+          </Box>
+        </SectionHelper>
+      )}
+
       <Tabs
         items={PRODUCTS_SUB_TABS}
         activeId={productsSubTab}
@@ -1232,7 +1255,14 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                 data={filteredProducts}
                 columns={[
                   {
-                    title: '',
+                    title: (
+                      <input
+                        type="checkbox"
+                        checked={filteredProducts.length > 0 && selected.size === filteredProducts.length}
+                        onChange={toggleSelectAll}
+                        title="Select all"
+                      />
+                    ),
                     render: (row: CachedProductRow) => (
                       <input type="checkbox" checked={selected.has(row.productId)} onChange={() => toggleSelect(row.productId)} />
                     ),
@@ -1399,26 +1429,6 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
               </Text>
             )}
           </Box>
-
-          {pendingFixCount > 0 && (
-            <SectionHelper appearance="warning">
-              <Box direction="horizontal" gap="12px" verticalAlign="middle">
-                <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
-                <Button size="small" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
-                  {applyingFixes ? 'Applying...' : 'Apply to Wix'}
-                </Button>
-                <Button size="small" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
-                  Apply to GMC
-                </Button>
-                <Button size="small" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
-                  Apply to Both
-                </Button>
-                <Button size="small" skin="destructive" onClick={() => setPendingFixes(new Map())}>
-                  Discard All
-                </Button>
-              </Box>
-            </SectionHelper>
-          )}
 
           {compliance ? (
             <Card>
