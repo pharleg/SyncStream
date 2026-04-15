@@ -297,6 +297,12 @@ const MAPPING_SUB_TABS = [
   { id: 'filters', title: 'Filters' },
 ];
 
+const PRODUCTS_SUB_TABS = [
+  { id: 'products', title: 'Products' },
+  { id: 'compliance', title: 'Compliance' },
+  { id: 'ai', title: 'AI' },
+];
+
 interface SyncRule {
   id?: string;
   instanceId: string;
@@ -760,7 +766,8 @@ function applyClientFilter(
   });
 }
 
-const ProductsTab: FC = () => {
+const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => void }> = ({ config: _config, onConfigRefresh: _onConfigRefresh }) => {
+  const [productsSubTab, setProductsSubTab] = useState('products');
   const [products, setProducts] = useState<CachedProductRow[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<CachedProductRow[]>([]);
   const [cachedAt, setCachedAt] = useState<string | null>(null);
@@ -929,13 +936,16 @@ const ProductsTab: FC = () => {
   }, [selected, loadProducts]);
 
   const handleEnhanceAndPreview = useCallback(async () => {
-    if (selected.size === 0) return;
+    const targetIds = selected.size > 0
+      ? Array.from(selected)
+      : filteredProducts.map((p) => p.productId);
+    if (targetIds.length === 0) return;
     setAiPreviewLoading(true); setError(null);
     try {
       const response = await appFetch('/api/products-apply-ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: Array.from(selected) }),
+        body: JSON.stringify({ instanceId: 'default', productIds: targetIds }),
       });
       const data = await response.json();
       setAiPreviews(
@@ -944,7 +954,7 @@ const ProductsTab: FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate previews');
     } finally { setAiPreviewLoading(false); }
-  }, [selected]);
+  }, [selected, filteredProducts]);
 
   const handleApplyToStore = useCallback(async () => {
     if (!aiPreviews) return;
@@ -1144,410 +1154,458 @@ const ProductsTab: FC = () => {
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
       {success && <SectionHelper appearance="success">{success}</SectionHelper>}
 
-      {/* Toolbar */}
-      <Box gap="12px" verticalAlign="middle">
-        <Button size="small" onClick={handlePull} disabled={pulling}>
-          {pulling ? 'Pulling...' : 'Pull Products'}
-        </Button>
-        {cachedAt && <Text size="tiny" secondary>Last refreshed: {new Date(cachedAt).toLocaleString()}</Text>}
-        <Box marginLeft="auto" gap="12px">
-          {selected.size > 0 && (
-            <Button size="small" onClick={handleEnhanceAndPreview} disabled={aiPreviewLoading}>
-              {aiPreviewLoading ? 'Generating...' : `Enhance with AI (${selected.size})`}
-            </Button>
-          )}
-          <Button size="small" onClick={handlePreviewRules} disabled={previewing || products.length === 0}>
-            {previewing ? 'Loading...' : previewData ? 'Clear Preview' : 'Preview Rules'}
-          </Button>
-          <Button size="small" skin="dark" onClick={handleSyncProducts} disabled={syncing || products.length === 0}>
-            {syncing ? 'Syncing...' : `Sync ${selected.size > 0 ? selected.size : filteredProducts.length} Products`}
-          </Button>
-        </Box>
-      </Box>
+      <Tabs
+        items={PRODUCTS_SUB_TABS}
+        activeId={productsSubTab}
+        onClick={(tab) => setProductsSubTab(String(tab.id))}
+      />
 
-      {/* AI Enhancement Preview */}
-      {aiPreviews && (
-        <Card>
-          <Card.Header
-            title="AI Enhancement Preview"
-            subtitle={`${aiPreviews.filter((p) => p.accepted).length} of ${aiPreviews.length} selected for update`}
-            suffix={
-              <Box gap="12px">
-                <Button size="small" priority="secondary" onClick={() => setAiPreviews(null)}>
-                  Cancel
-                </Button>
-                <Button size="small" skin="dark" onClick={handleApplyToStore} disabled={aiApplying}>
-                  {aiApplying ? 'Applying...' : 'Apply to Store'}
-                </Button>
-              </Box>
-            }
-          />
-          <Card.Divider />
-          <Card.Content>
-            <Box direction="vertical" gap="12px" maxHeight="600px" overflowY="auto">
-              {aiPreviews.map((preview) => (
-                <Card key={preview.productId}>
-                  <Card.Content>
-                    <Box gap="12px" verticalAlign="top">
-                      <Box width="30px">
-                        <ToggleSwitch
-                          size="small"
-                          checked={preview.accepted}
-                          onChange={() => {
-                            setAiPreviews((prev) =>
-                              prev?.map((p) =>
-                                p.productId === preview.productId
-                                  ? { ...p, accepted: !p.accepted }
-                                  : p,
-                              ) ?? null,
-                            );
-                          }}
-                        />
-                      </Box>
-                      <Box direction="vertical" gap="6px" width="100%">
-                        <Box gap="12px">
-                          <Box direction="vertical" width="50%">
-                            <Text size="tiny" weight="bold" secondary>Original Title</Text>
-                            <Text size="small">{preview.original.title}</Text>
-                          </Box>
-                          <Box direction="vertical" width="50%">
-                            <Text size="tiny" weight="bold" skin="success">Enhanced Title</Text>
-                            <Text size="small">{preview.enhanced?.title ?? '—'}</Text>
-                          </Box>
-                        </Box>
-                        <Box gap="12px">
-                          <Box direction="vertical" width="50%">
-                            <Text size="tiny" weight="bold" secondary>Original Description</Text>
-                            <Text size="tiny">{preview.original.description ?? ''}</Text>
-                          </Box>
-                          <Box direction="vertical" width="50%">
-                            <Text size="tiny" weight="bold" skin="success">Enhanced Description</Text>
-                            <Text size="tiny">{preview.enhanced?.description ?? ''}</Text>
-                          </Box>
-                        </Box>
-                      </Box>
-                    </Box>
-                  </Card.Content>
-                </Card>
-              ))}
+      {productsSubTab === 'products' && (
+        <Box direction="vertical" gap="18px">
+          {/* Toolbar */}
+          <Box gap="12px" verticalAlign="middle">
+            <Button size="small" onClick={handlePull} disabled={pulling}>
+              {pulling ? 'Pulling...' : 'Pull Products'}
+            </Button>
+            {cachedAt && <Text size="tiny" secondary>Last refreshed: {new Date(cachedAt).toLocaleString()}</Text>}
+            <Box marginLeft="auto" gap="12px">
+              <Button size="small" onClick={handlePreviewRules} disabled={previewing || products.length === 0}>
+                {previewing ? 'Loading...' : previewData ? 'Clear Preview' : 'Preview Rules'}
+              </Button>
+              <Button size="small" skin="dark" onClick={handleSyncProducts} disabled={syncing || products.length === 0}>
+                {syncing ? 'Syncing...' : `Sync ${selected.size > 0 ? selected.size : filteredProducts.length} Products`}
+              </Button>
             </Box>
-          </Card.Content>
-        </Card>
+          </Box>
+
+          {/* Filter bar */}
+          <Card>
+            <Card.Content>
+              <Box gap="12px" verticalAlign="bottom">
+                <Box width="150px">
+                  <FormField label="Field">
+                    <Dropdown size="small" options={FILTER_FIELD_OPTIONS} selectedId={filterField} onSelect={(o) => setFilterField(o.id as string)} />
+                  </FormField>
+                </Box>
+                <Box width="150px">
+                  <FormField label="Operator">
+                    <Dropdown size="small" options={FILTER_OP_OPTIONS} selectedId={filterOperator} onSelect={(o) => setFilterOperator(o.id as string)} />
+                  </FormField>
+                </Box>
+                <Box width="200px">
+                  <FormField label="Value">
+                    <Input size="small" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder="Filter value..." />
+                  </FormField>
+                </Box>
+                <Button size="small" onClick={handlePreviewFilter}>Preview</Button>
+                {activeFilter && (
+                  <>
+                    <Button size="small" skin="light" onClick={handlePinFilter}>Pin Filter</Button>
+                    <Button size="small" skin="light" onClick={handleClearFilter}>Clear</Button>
+                  </>
+                )}
+              </Box>
+              {activeFilter && (
+                <Box marginTop="6px">
+                  <Badge size="small" skin="general">{activeFilter.field} {activeFilter.operator} &quot;{activeFilter.value}&quot;</Badge>
+                </Box>
+              )}
+            </Card.Content>
+          </Card>
+
+          {/* Empty state */}
+          {products.length === 0 && (
+            <Card>
+              <Card.Content>
+                <Box direction="vertical" align="center" padding="48px" gap="12px">
+                  <Text weight="bold">No products loaded</Text>
+                  <Text size="small" secondary>Click &quot;Pull Products&quot; to fetch your store catalog.</Text>
+                </Box>
+              </Card.Content>
+            </Card>
+          )}
+
+          {/* Product table */}
+          {filteredProducts.length > 0 && (
+            <Card>
+              <Table
+                data={filteredProducts}
+                columns={[
+                  {
+                    title: '',
+                    render: (row: CachedProductRow) => (
+                      <input type="checkbox" checked={selected.has(row.productId)} onChange={() => toggleSelect(row.productId)} />
+                    ),
+                    width: '40px',
+                  },
+                  {
+                    title: 'Image',
+                    render: (row: CachedProductRow) => (
+                      row.imageUrl
+                        ? <img
+                            src={row.imageUrl}
+                            alt={row.name ?? ''}
+                            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
+                            title="Image being synced to GMC/Meta"
+                          />
+                        : <Box width="40px" height="40px" />
+                    ),
+                    width: '60px',
+                  },
+                  {
+                    title: 'Title',
+                    render: (row: CachedProductRow) => {
+                      const preview = previewData?.get(row.productId);
+                      if (preview && preview.original.title !== preview.transformed.title) {
+                        return (
+                          <Box direction="vertical">
+                            <Text size="small" style={{ textDecoration: 'line-through' }}>{preview.original.title}</Text>
+                            <Text size="small" skin="success">{preview.transformed.title}</Text>
+                          </Box>
+                        );
+                      }
+                      return <Text size="small">{row.name}</Text>;
+                    },
+                    width: '18%',
+                  },
+                  {
+                    title: 'Price',
+                    render: (row: CachedProductRow) => <Text size="small">{row.price ? `$${row.price}` : '—'}</Text>,
+                    width: '70px',
+                  },
+                  {
+                    title: 'Stock',
+                    render: (row: CachedProductRow) => (
+                      <Badge size="small" skin={row.availability === 'IN_STOCK' ? 'success' : 'danger'}>
+                        {row.availability === 'IN_STOCK' ? 'In Stock' : 'Out'}
+                      </Badge>
+                    ),
+                    width: '80px',
+                  },
+                  {
+                    title: 'Variants',
+                    render: (row: CachedProductRow) => <Text size="small">{row.variantCount}</Text>,
+                    width: '50px',
+                  },
+                  {
+                    title: 'Description',
+                    render: (row: CachedProductRow) => (
+                      <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+                        {row.plainDescription ?? row.description ?? '—'}
+                      </Text>
+                    ),
+                    width: '18%',
+                  },
+                  {
+                    title: 'AI Description',
+                    render: (row: CachedProductRow) => (
+                      <Text size="tiny" skin={row.enhancedDescription ? 'success' : 'disabled'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+                        {row.enhancedDescription ?? '—'}
+                      </Text>
+                    ),
+                    width: '18%',
+                  },
+                  {
+                    title: 'Platforms',
+                    render: (row: CachedProductRow) => {
+                      const platforms = productPlatforms.get(row.productId) ?? ['gmc', 'meta'];
+                      return (
+                        <Box direction="horizontal" gap="4px">
+                          <Badge
+                            size="small"
+                            skin={platforms.includes('gmc') ? 'success' : 'neutral'}
+                            onClick={() => handlePlatformToggle([row.productId], 'gmc', !platforms.includes('gmc'))}
+                          >
+                            GMC
+                          </Badge>
+                          <Badge
+                            size="small"
+                            skin={platforms.includes('meta') ? 'success' : 'neutral'}
+                            onClick={() => handlePlatformToggle([row.productId], 'meta', !platforms.includes('meta'))}
+                          >
+                            Meta
+                          </Badge>
+                        </Box>
+                      );
+                    },
+                    width: '120px',
+                  },
+                  {
+                    title: 'Sync',
+                    render: (row: CachedProductRow) => {
+                      if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
+                      const skin = row.syncStatus.status === 'synced' ? 'success' : row.syncStatus.status === 'error' ? 'danger' : 'warning';
+                      return <Badge size="small" skin={skin}>{row.syncStatus.status}</Badge>;
+                    },
+                    width: '70px',
+                  },
+                  {
+                    title: '',
+                    render: (row: CachedProductRow) => (
+                      <Button size="tiny" skin="light" onClick={() => handleEnhanceOne(row.productId)} disabled={enhancing === row.productId}>
+                        {enhancing === row.productId ? '...' : 'AI'}
+                      </Button>
+                    ),
+                    width: '50px',
+                  },
+                ]}
+              >
+                <TableToolbar>
+                  <TableToolbar.Title>
+                    {filteredProducts.length} products{activeFilter ? ' (filtered)' : ''}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
+                  </TableToolbar.Title>
+                  {selected.size > 0 && (
+                    <TableToolbar.Item>
+                      <Dropdown
+                        size="small"
+                        placeholder="Set platforms..."
+                        options={[
+                          { id: 'all', value: 'All platforms' },
+                          { id: 'gmc', value: 'GMC only' },
+                          { id: 'meta', value: 'Meta only' },
+                        ]}
+                        onSelect={(option: any) => {
+                          const ids = Array.from(selected);
+                          const platforms: ('gmc' | 'meta')[] | null = option.id === 'all' ? null
+                            : option.id === 'gmc' ? ['gmc']
+                            : ['meta'];
+                          // Update all selected products
+                          ids.forEach((id) => {
+                            const enabled = platforms === null || platforms.includes('gmc');
+                            handlePlatformToggle([id], 'gmc', enabled);
+                          });
+                        }}
+                      />
+                    </TableToolbar.Item>
+                  )}
+                </TableToolbar>
+                <Table.Content />
+              </Table>
+            </Card>
+          )}
+        </Box>
       )}
 
-      {/* Filter bar */}
-      <Card>
-        <Card.Content>
-          <Box gap="12px" verticalAlign="bottom">
-            <Box width="150px">
-              <FormField label="Field">
-                <Dropdown size="small" options={FILTER_FIELD_OPTIONS} selectedId={filterField} onSelect={(o) => setFilterField(o.id as string)} />
-              </FormField>
-            </Box>
-            <Box width="150px">
-              <FormField label="Operator">
-                <Dropdown size="small" options={FILTER_OP_OPTIONS} selectedId={filterOperator} onSelect={(o) => setFilterOperator(o.id as string)} />
-              </FormField>
-            </Box>
-            <Box width="200px">
-              <FormField label="Value">
-                <Input size="small" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder="Filter value..." />
-              </FormField>
-            </Box>
-            <Button size="small" onClick={handlePreviewFilter}>Preview</Button>
-            {activeFilter && (
-              <>
-                <Button size="small" skin="light" onClick={handlePinFilter}>Pin Filter</Button>
-                <Button size="small" skin="light" onClick={handleClearFilter}>Clear</Button>
-              </>
+      {productsSubTab === 'compliance' && (
+        <Box direction="vertical" gap="18px">
+          {/* Check Compliance toolbar */}
+          <Box gap="12px" verticalAlign="middle">
+            <Button size="small" onClick={handleComplianceCheck} disabled={complianceLoading}>
+              {complianceLoading ? 'Checking...' : 'Check Compliance'}
+            </Button>
+            {compliance && (
+              <Text size="tiny" secondary>
+                Last checked: {compliance.totalProducts} products
+              </Text>
             )}
           </Box>
-          {activeFilter && (
-            <Box marginTop="6px">
-              <Badge size="small" skin="general">{activeFilter.field} {activeFilter.operator} &quot;{activeFilter.value}&quot;</Badge>
-            </Box>
-          )}
-        </Card.Content>
-      </Card>
 
-      {/* Empty state */}
-      {products.length === 0 && (
-        <Card>
-          <Card.Content>
-            <Box direction="vertical" align="center" padding="48px" gap="12px">
-              <Text weight="bold">No products loaded</Text>
-              <Text size="small" secondary>Click &quot;Pull Products&quot; to fetch your store catalog.</Text>
-            </Box>
-          </Card.Content>
-        </Card>
+          {pendingFixCount > 0 && (
+            <SectionHelper appearance="warning">
+              <Box direction="horizontal" gap="12px" verticalAlign="middle">
+                <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
+                <Button size="small" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
+                  {applyingFixes ? 'Applying...' : 'Apply to Wix'}
+                </Button>
+                <Button size="small" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
+                  Apply to GMC
+                </Button>
+                <Button size="small" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
+                  Apply to Both
+                </Button>
+                <Button size="small" skin="destructive" onClick={() => setPendingFixes(new Map())}>
+                  Discard All
+                </Button>
+              </Box>
+            </SectionHelper>
+          )}
+
+          {compliance ? (
+            <Card>
+              <Card.Header title="Feed Health" suffix={
+                <Badge skin={compliance.healthScore >= 90 ? 'success' : compliance.healthScore >= 70 ? 'warning' : 'danger'}>
+                  {compliance.healthScore}%
+                </Badge>
+              } />
+              <Card.Content>
+                <Box direction="vertical" gap="12px">
+                  <Box direction="horizontal" gap="24px">
+                    <Text size="small">{compliance.compliantCount} compliant</Text>
+                    <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
+                    <Text size="small" skin="error">{compliance.errorCount} errors</Text>
+                    <Text size="small" secondary>of {compliance.totalProducts} products</Text>
+                  </Box>
+                  {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
+                    const product = filteredProducts.find((p) => p.productId === r.productId);
+                    const isExpanded = expandedCompliance === r.offerId;
+                    const fixes = pendingFixes.get(r.offerId);
+                    const allIssues = [...r.errors, ...r.warnings];
+                    return (
+                      <div key={r.offerId} style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <div onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
+                            {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
+                          </Badge>
+                          <Text size="small" weight="bold">{product?.name ?? r.productId.slice(0, 12)}</Text>
+                          <Text size="tiny" secondary>ID: {r.offerId}</Text>
+                          {fixes && fixes.size > 0 && (
+                            <Badge size="small" skin="success">{fixes.size} fix{fixes.size > 1 ? 'es' : ''} staged</Badge>
+                          )}
+                          <Text size="tiny" secondary>{isExpanded ? '▾' : '▸'}</Text>
+                        </div>
+                        {isExpanded && (
+                          <div style={{ paddingLeft: 12, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {allIssues.map((issue, i) => {
+                              const fixKey = `${r.offerId}:${issue.field}`;
+                              const isEditing = editingFix === fixKey;
+                              const hasFix = fixes?.has(issue.field);
+                              const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink', 'offerId'].includes(issue.field);
+                              return (
+                                <div key={`issue${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Text size="tiny" skin={issue.severity === 'error' ? 'error' : undefined}>
+                                      {issue.severity === 'warning' ? '⚠' : '✗'} {issue.field}: {issue.message}
+                                    </Text>
+                                    {hasFix && (
+                                      <Badge size="small" skin="success">Fixed: {fixes!.get(issue.field)!.slice(0, 30)}{fixes!.get(issue.field)!.length > 30 ? '...' : ''}</Badge>
+                                    )}
+                                    {fixable && !isEditing && !hasFix && (
+                                      <button onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }} style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
+                                        Fix
+                                      </button>
+                                    )}
+                                    {hasFix && (
+                                      <button onClick={(e) => { e.stopPropagation(); handleStageFix(r.offerId, issue.field, ''); }} style={{ border: '1px solid #9ca3af', background: 'transparent', color: '#9ca3af', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 11 }}>
+                                        Undo
+                                      </button>
+                                    )}
+                                  </div>
+                                  {isEditing && (
+                                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 16 }}>
+                                      <Input size="small" placeholder={`Enter ${issue.field} value...`} value={editingFixValue} onChange={(e: any) => setEditingFixValue(e.target.value)} />
+                                      <Button size="tiny" onClick={() => handleStageFix(r.offerId, issue.field, editingFixValue)} disabled={!editingFixValue.trim()}>
+                                        Stage
+                                      </Button>
+                                      <Button size="tiny" skin="light" onClick={() => { setEditingFix(null); setEditingFixValue(''); }}>
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </Box>
+              </Card.Content>
+            </Card>
+          ) : (
+            <Card>
+              <Card.Content>
+                <Box direction="vertical" align="center" padding="48px" gap="12px">
+                  <Text weight="bold">No compliance data</Text>
+                  <Text size="small" secondary>Click &quot;Check Compliance&quot; to validate your catalog against GMC requirements.</Text>
+                </Box>
+              </Card.Content>
+            </Card>
+          )}
+        </Box>
       )}
 
-      {pendingFixCount > 0 && (
-        <SectionHelper appearance="warning">
-          <Box direction="horizontal" gap="12px" verticalAlign="middle">
-            <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
-            <Button size="tiny" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
-              {applyingFixes ? 'Applying...' : 'Apply to Wix'}
-            </Button>
-            <Button size="tiny" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
-              Apply to GMC
-            </Button>
-            <Button size="tiny" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
-              Apply to Both
-            </Button>
-            <Button size="tiny" skin="destructive" onClick={() => setPendingFixes(new Map())}>
-              Discard All
+      {productsSubTab === 'ai' && (
+        <Box direction="vertical" gap="18px">
+          {/* AI toolbar */}
+          <Box gap="12px" verticalAlign="middle">
+            <Button size="small" onClick={handleEnhanceAndPreview} disabled={aiPreviewLoading || filteredProducts.length === 0}>
+              {aiPreviewLoading
+                ? 'Generating...'
+                : selected.size > 0
+                  ? `Enhance Selected (${selected.size})`
+                  : 'Enhance All'}
             </Button>
           </Box>
-        </SectionHelper>
-      )}
 
-      {compliance && (
-        <Card>
-          <Card.Header title="Feed Health" suffix={
-            <Badge skin={compliance.healthScore >= 90 ? 'success' : compliance.healthScore >= 70 ? 'warning' : 'danger'}>
-              {compliance.healthScore}%
-            </Badge>
-          } />
-          <Card.Content>
-            <Box direction="vertical" gap="12px">
-              <Box direction="horizontal" gap="24px">
-                <Text size="small">{compliance.compliantCount} compliant</Text>
-                <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
-                <Text size="small" skin="error">{compliance.errorCount} errors</Text>
-                <Text size="small" secondary>of {compliance.totalProducts} products</Text>
-              </Box>
-              {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
-                const product = filteredProducts.find((p) => p.productId === r.productId);
-                const isExpanded = expandedCompliance === r.offerId;
-                const fixes = pendingFixes.get(r.offerId);
-                const allIssues = [...r.errors, ...r.warnings];
-                return (
-                  <div key={r.offerId} style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    <div onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
-                        {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
-                      </Badge>
-                      <Text size="small" weight="bold">{product?.name ?? r.productId.slice(0, 12)}</Text>
-                      <Text size="tiny" secondary>ID: {r.offerId}</Text>
-                      {fixes && fixes.size > 0 && (
-                        <Badge size="small" skin="success">{fixes.size} fix{fixes.size > 1 ? 'es' : ''} staged</Badge>
-                      )}
-                      <Text size="tiny" secondary>{isExpanded ? '▾' : '▸'}</Text>
-                    </div>
-                    {isExpanded && (
-                      <div style={{ paddingLeft: 12, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {allIssues.map((issue, i) => {
-                          const fixKey = `${r.offerId}:${issue.field}`;
-                          const isEditing = editingFix === fixKey;
-                          const hasFix = fixes?.has(issue.field);
-                          const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink', 'offerId'].includes(issue.field);
-                          return (
-                            <div key={`issue${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                <Text size="tiny" skin={issue.severity === 'error' ? 'error' : undefined}>
-                                  {issue.severity === 'warning' ? '⚠' : '✗'} {issue.field}: {issue.message}
-                                </Text>
-                                {hasFix && (
-                                  <Badge size="small" skin="success">Fixed: {fixes!.get(issue.field)!.slice(0, 30)}{fixes!.get(issue.field)!.length > 30 ? '...' : ''}</Badge>
-                                )}
-                                {fixable && !isEditing && !hasFix && (
-                                  <button onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }} style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                                    Fix
-                                  </button>
-                                )}
-                                {hasFix && (
-                                  <button onClick={(e) => { e.stopPropagation(); handleStageFix(r.offerId, issue.field, ''); }} style={{ border: '1px solid #9ca3af', background: 'transparent', color: '#9ca3af', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 11 }}>
-                                    Undo
-                                  </button>
-                                )}
-                              </div>
-                              {isEditing && (
-                                <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 16 }}>
-                                  <Input size="small" placeholder={`Enter ${issue.field} value...`} value={editingFixValue} onChange={(e: any) => setEditingFixValue(e.target.value)} />
-                                  <Button size="tiny" onClick={() => handleStageFix(r.offerId, issue.field, editingFixValue)} disabled={!editingFixValue.trim()}>
-                                    Stage
-                                  </Button>
-                                  <Button size="tiny" skin="light" onClick={() => { setEditingFix(null); setEditingFixValue(''); }}>
-                                    Cancel
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </Box>
-          </Card.Content>
-        </Card>
-      )}
-
-      {/* Product table */}
-      {filteredProducts.length > 0 && (
-        <Card>
-          <Table
-            data={filteredProducts}
-            columns={[
-              {
-                title: '',
-                render: (row: CachedProductRow) => (
-                  <input type="checkbox" checked={selected.has(row.productId)} onChange={() => toggleSelect(row.productId)} />
-                ),
-                width: '40px',
-              },
-              {
-                title: 'Image',
-                render: (row: CachedProductRow) => (
-                  row.imageUrl
-                    ? <img
-                        src={row.imageUrl}
-                        alt={row.name ?? ''}
-                        style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
-                        title="Image being synced to GMC/Meta"
-                      />
-                    : <Box width="40px" height="40px" />
-                ),
-                width: '60px',
-              },
-              {
-                title: 'Title',
-                render: (row: CachedProductRow) => {
-                  const preview = previewData?.get(row.productId);
-                  if (preview && preview.original.title !== preview.transformed.title) {
-                    return (
-                      <Box direction="vertical">
-                        <Text size="small" style={{ textDecoration: 'line-through' }}>{preview.original.title}</Text>
-                        <Text size="small" skin="success">{preview.transformed.title}</Text>
-                      </Box>
-                    );
-                  }
-                  return <Text size="small">{row.name}</Text>;
-                },
-                width: '18%',
-              },
-              {
-                title: 'Price',
-                render: (row: CachedProductRow) => <Text size="small">{row.price ? `$${row.price}` : '—'}</Text>,
-                width: '70px',
-              },
-              {
-                title: 'Stock',
-                render: (row: CachedProductRow) => (
-                  <Badge size="small" skin={row.availability === 'IN_STOCK' ? 'success' : 'danger'}>
-                    {row.availability === 'IN_STOCK' ? 'In Stock' : 'Out'}
-                  </Badge>
-                ),
-                width: '80px',
-              },
-              {
-                title: 'Variants',
-                render: (row: CachedProductRow) => <Text size="small">{row.variantCount}</Text>,
-                width: '50px',
-              },
-              {
-                title: 'Description',
-                render: (row: CachedProductRow) => (
-                  <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-                    {row.plainDescription ?? row.description ?? '—'}
-                  </Text>
-                ),
-                width: '18%',
-              },
-              {
-                title: 'AI Description',
-                render: (row: CachedProductRow) => (
-                  <Text size="tiny" skin={row.enhancedDescription ? 'success' : 'disabled'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-                    {row.enhancedDescription ?? '—'}
-                  </Text>
-                ),
-                width: '18%',
-              },
-              {
-                title: 'Platforms',
-                render: (row: CachedProductRow) => {
-                  const platforms = productPlatforms.get(row.productId) ?? ['gmc', 'meta'];
-                  return (
-                    <Box direction="horizontal" gap="4px">
-                      <Badge
-                        size="small"
-                        skin={platforms.includes('gmc') ? 'success' : 'neutral'}
-                        onClick={() => handlePlatformToggle([row.productId], 'gmc', !platforms.includes('gmc'))}
-                      >
-                        GMC
-                      </Badge>
-                      <Badge
-                        size="small"
-                        skin={platforms.includes('meta') ? 'success' : 'neutral'}
-                        onClick={() => handlePlatformToggle([row.productId], 'meta', !platforms.includes('meta'))}
-                      >
-                        Meta
-                      </Badge>
-                    </Box>
-                  );
-                },
-                width: '120px',
-              },
-              {
-                title: 'Sync',
-                render: (row: CachedProductRow) => {
-                  if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
-                  const skin = row.syncStatus.status === 'synced' ? 'success' : row.syncStatus.status === 'error' ? 'danger' : 'warning';
-                  return <Badge size="small" skin={skin}>{row.syncStatus.status}</Badge>;
-                },
-                width: '70px',
-              },
-              {
-                title: '',
-                render: (row: CachedProductRow) => (
-                  <Button size="tiny" skin="light" onClick={() => handleEnhanceOne(row.productId)} disabled={enhancing === row.productId}>
-                    {enhancing === row.productId ? '...' : 'AI'}
-                  </Button>
-                ),
-                width: '50px',
-              },
-            ]}
-          >
-            <TableToolbar>
-              <TableToolbar.Title>
-                {filteredProducts.length} products{activeFilter ? ' (filtered)' : ''}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
-              </TableToolbar.Title>
-              <TableToolbar.Item>
-                <Button size="small" skin="light" onClick={handleComplianceCheck} disabled={complianceLoading}>
-                  {complianceLoading ? 'Checking...' : 'Check Now'}
-                </Button>
-              </TableToolbar.Item>
-              {selected.size > 0 && (
-                <TableToolbar.Item>
-                  <Dropdown
-                    size="small"
-                    placeholder="Set platforms..."
-                    options={[
-                      { id: 'all', value: 'All platforms' },
-                      { id: 'gmc', value: 'GMC only' },
-                      { id: 'meta', value: 'Meta only' },
-                    ]}
-                    onSelect={(option: any) => {
-                      const ids = Array.from(selected);
-                      const platforms: ('gmc' | 'meta')[] | null = option.id === 'all' ? null
-                        : option.id === 'gmc' ? ['gmc']
-                        : ['meta'];
-                      // Update all selected products
-                      ids.forEach((id) => {
-                        const enabled = platforms === null || platforms.includes('gmc');
-                        handlePlatformToggle([id], 'gmc', enabled);
-                      });
-                    }}
-                  />
-                </TableToolbar.Item>
-              )}
-            </TableToolbar>
-            <Table.Content />
-          </Table>
-        </Card>
+          {aiPreviews ? (
+            <Card>
+              <Card.Header
+                title="AI Enhancement Preview"
+                subtitle={`${aiPreviews.filter((p) => p.accepted).length} of ${aiPreviews.length} selected for update`}
+                suffix={
+                  <Box gap="12px">
+                    <Button size="small" priority="secondary" onClick={() => setAiPreviews(null)}>
+                      Cancel
+                    </Button>
+                    <Button size="small" skin="dark" onClick={handleApplyToStore} disabled={aiApplying}>
+                      {aiApplying ? 'Applying...' : 'Apply to Store'}
+                    </Button>
+                  </Box>
+                }
+              />
+              <Card.Divider />
+              <Card.Content>
+                <Box direction="vertical" gap="12px" maxHeight="600px" overflowY="auto">
+                  {aiPreviews.map((preview) => (
+                    <Card key={preview.productId}>
+                      <Card.Content>
+                        <Box gap="12px" verticalAlign="top">
+                          <Box width="30px">
+                            <ToggleSwitch
+                              size="small"
+                              checked={preview.accepted}
+                              onChange={() => {
+                                setAiPreviews((prev) =>
+                                  prev?.map((p) =>
+                                    p.productId === preview.productId
+                                      ? { ...p, accepted: !p.accepted }
+                                      : p,
+                                  ) ?? null,
+                                );
+                              }}
+                            />
+                          </Box>
+                          <Box direction="vertical" gap="6px" width="100%">
+                            <Box gap="12px">
+                              <Box direction="vertical" width="50%">
+                                <Text size="tiny" weight="bold" secondary>Original Title</Text>
+                                <Text size="small">{preview.original.title}</Text>
+                              </Box>
+                              <Box direction="vertical" width="50%">
+                                <Text size="tiny" weight="bold" skin="success">Enhanced Title</Text>
+                                <Text size="small">{preview.enhanced?.title ?? '—'}</Text>
+                              </Box>
+                            </Box>
+                            <Box gap="12px">
+                              <Box direction="vertical" width="50%">
+                                <Text size="tiny" weight="bold" secondary>Original Description</Text>
+                                <Text size="tiny">{preview.original.description ?? ''}</Text>
+                              </Box>
+                              <Box direction="vertical" width="50%">
+                                <Text size="tiny" weight="bold" skin="success">Enhanced Description</Text>
+                                <Text size="tiny">{preview.enhanced?.description ?? ''}</Text>
+                              </Box>
+                            </Box>
+                          </Box>
+                        </Box>
+                      </Card.Content>
+                    </Card>
+                  ))}
+                </Box>
+              </Card.Content>
+            </Card>
+          ) : (
+            <Card>
+              <Card.Content>
+                <Box direction="vertical" align="center" padding="48px" gap="12px">
+                  <Text weight="bold">No AI previews</Text>
+                  <Text size="small" secondary>Click &quot;Enhance Selected&quot; or &quot;Enhance All&quot; to generate AI-enhanced titles and descriptions.</Text>
+                </Box>
+              </Card.Content>
+            </Card>
+          )}
+        </Box>
       )}
     </Box>
   );
@@ -2052,7 +2110,7 @@ const SyncStreamPage: FC = () => {
 
             {activeTab === 'connect' && <ConnectTab config={config} onRefresh={loadConfig} />}
             {activeTab === 'dashboard' && <DashboardTab />}
-            {activeTab === 'products' && <ProductsTab />}
+            {activeTab === 'products' && <ProductsTab config={config} onConfigRefresh={loadConfig} />}
             {activeTab === 'mapping' && <MappingTab config={config} />}
             {activeTab === 'settings' && <SettingsTab config={config} onRefresh={loadConfig} />}
           </Box>
