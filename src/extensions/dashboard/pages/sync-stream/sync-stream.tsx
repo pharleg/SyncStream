@@ -1680,8 +1680,12 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                     checked={_config?.aiEnhancementEnabled ?? false}
                     onChange={async () => {
                       const newVal = !(_config?.aiEnhancementEnabled ?? false);
-                      await saveAppConfig({ aiEnhancementEnabled: newVal });
-                      await _onConfigRefresh();
+                      try {
+                        await saveAppConfig({ aiEnhancementEnabled: newVal });
+                        await _onConfigRefresh();
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : 'Failed to update AI enhancement setting');
+                      }
                     }}
                   />
                   <Text size="small">{_config?.aiEnhancementEnabled ? 'AI Enhancement Enabled' : 'AI Enhancement Disabled'}</Text>
@@ -2047,12 +2051,13 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
     setSaving(true);
     try {
       await saveAppConfig({ aiEnhancementStyle: aiStyle });
+      onRefresh();
     } catch {
       // silent
     } finally {
       setSaving(false);
     }
-  }, [aiStyle]);
+  }, [aiStyle, onRefresh]);
 
   const handleEnhanceAll = useCallback(async () => {
     setEnhancing(true);
@@ -2160,6 +2165,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
                 onChange={(e) => setAiStyle(e.target.value)}
                 onBlur={handleSaveAiStyle}
                 placeholder="e.g., professional and concise"
+                disabled={saving}
               />
             </FormField>
             <Box verticalAlign="middle" gap="12px">
