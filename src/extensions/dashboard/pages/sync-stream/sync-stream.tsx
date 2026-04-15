@@ -821,6 +821,8 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
   const [editingFix, setEditingFix] = useState<string | null>(null);
   const [editingFixValue, setEditingFixValue] = useState('');
   const [applyingFixes, setApplyingFixes] = useState(false);
+  // Tracks which issue key ("offerId:field") has an in-flight AI fix request
+  const [aiFixLoading, setAiFixLoading] = useState<Set<string>>(new Set());
 
   const [overrideCounts, setOverrideCounts] = useState<Map<string, number>>(new Map());
   const [overrideDetails, setOverrideDetails] = useState<Map<string, Record<string, string>>>(new Map());
@@ -1083,6 +1085,37 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
     });
     setEditingFix(null);
     setEditingFixValue('');
+  }, []);
+
+  const handleFixWithAi = useCallback(async (offerId: string, productId: string, field: 'description' | 'title') => {
+    const issueKey = `${offerId}:${field}`;
+    setAiFixLoading((prev) => new Set([...prev, issueKey]));
+    try {
+      const response = await appFetch('/api/products-apply-ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instanceId: 'default', productIds: [productId] }),
+      });
+      const data = await response.json();
+      const preview = (data.previews ?? [])[0];
+      if (!preview?.enhanced) {
+        setError('AI enhancement returned no result for this product.');
+        return;
+      }
+      const suggestedValue = field === 'description'
+        ? preview.enhanced.description
+        : preview.enhanced.title;
+      setEditingFix(issueKey);
+      setEditingFixValue(suggestedValue ?? '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'AI fix failed');
+    } finally {
+      setAiFixLoading((prev) => {
+        const next = new Set(prev);
+        next.delete(issueKey);
+        return next;
+      });
+    }
   }, []);
 
   const handleApplyFixes = useCallback(async (target: 'wix' | 'gmc' | 'both') => {
@@ -1556,9 +1589,26 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                                       <Badge size="small" skin="success">Fixed: {fixes!.get(issue.field)!.slice(0, 30)}{fixes!.get(issue.field)!.length > 30 ? '...' : ''}</Badge>
                                     )}
                                     {fixable && !isEditing && !hasFix && (
-                                      <button onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }} style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}>
-                                        Fix
-                                      </button>
+                                      <Box direction="horizontal" gap="6px">
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }}
+                                          style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
+                                        >
+                                          Fix
+                                        </button>
+                                        {(issue.field === 'description' || issue.field === 'title') && _config?.aiEnhancementEnabled && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              handleFixWithAi(r.offerId, r.productId, issue.field as 'description' | 'title');
+                                            }}
+                                            disabled={aiFixLoading.has(fixKey)}
+                                            style={{ border: '1px solid #8b5cf6', background: '#f5f3ff', color: '#7c3aed', borderRadius: 4, padding: '2px 8px', cursor: aiFixLoading.has(fixKey) ? 'wait' : 'pointer', fontSize: 11, fontWeight: 600 }}
+                                          >
+                                            {aiFixLoading.has(fixKey) ? '...' : 'Fix with AI'}
+                                          </button>
+                                        )}
+                                      </Box>
                                     )}
                                     {hasFix && (
                                       <button onClick={(e) => { e.stopPropagation(); handleStageFix(r.offerId, issue.field, ''); }} style={{ border: '1px solid #9ca3af', background: 'transparent', color: '#9ca3af', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 11 }}>
