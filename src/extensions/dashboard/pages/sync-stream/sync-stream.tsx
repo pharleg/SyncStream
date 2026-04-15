@@ -14,6 +14,7 @@ import {
   Tabs,
   ToggleSwitch,
   Loader,
+  Popover,
   SectionHelper,
   WixDesignSystemProvider,
 } from '@wix/design-system';
@@ -821,6 +822,29 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
   const [editingFixValue, setEditingFixValue] = useState('');
   const [applyingFixes, setApplyingFixes] = useState(false);
 
+  const [overrideCounts, setOverrideCounts] = useState<Map<string, number>>(new Map());
+  const [overrideDetails, setOverrideDetails] = useState<Map<string, Record<string, string>>>(new Map());
+  const [openOverridePopover, setOpenOverridePopover] = useState<string | null>(null);
+
+  const loadOverrideCounts = useCallback(async () => {
+    if (products.length === 0) return;
+    const ids = products.map((p) => p.productId).join(',');
+    try {
+      const response = await appFetch(`/api/gmc-overrides?productIds=${encodeURIComponent(ids)}`);
+      const data = await response.json();
+      const countMap = new Map<string, number>();
+      const detailMap = new Map<string, Record<string, string>>();
+      for (const [id, count] of Object.entries(data.counts ?? {})) {
+        countMap.set(id, count as number);
+      }
+      for (const [id, fields] of Object.entries(data.details ?? {})) {
+        detailMap.set(id, fields as Record<string, string>);
+      }
+      setOverrideCounts(countMap);
+      setOverrideDetails(detailMap);
+    } catch { /* silent — overrides are best-effort UI */ }
+  }, [products]);
+
   const pendingFixCount = Array.from(pendingFixes.values()).reduce((sum, m) => sum + m.size, 0);
   // Keep module-level flag in sync for tab-change warning
   useEffect(() => { _hasPendingFixes = pendingFixCount > 0; }, [pendingFixCount]);
@@ -840,6 +864,10 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
   }, []);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  useEffect(() => {
+    if (products.length > 0) loadOverrideCounts();
+  }, [products, loadOverrideCounts]);
 
   const handlePull = useCallback(async () => {
     setPulling(true); setError(null); setSuccess(null);
@@ -1099,8 +1127,8 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         gmcSynced = data.synced ?? 0;
-        // Reload override counts after applying (loadOverrideCounts defined in Task 9)
-        // For now, this is a no-op stub until Task 9 adds the real implementation
+        // Reload override counts after applying
+        await loadOverrideCounts();
       }
 
       setPendingFixes(new Map());
@@ -1112,7 +1140,7 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to apply fixes');
     } finally { setApplyingFixes(false); }
-  }, [pendingFixes, compliance, loadProducts]);
+  }, [pendingFixes, compliance, loadProducts, loadOverrideCounts]);
 
   const handleSyncProducts = useCallback(async () => {
     const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
@@ -1354,6 +1382,59 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                       );
                     },
                     width: '120px',
+                  },
+                  {
+                    title: 'Overrides',
+                    render: (row: CachedProductRow) => {
+                      const count = overrideCounts.get(row.productId);
+                      if (!count) return <Text size="tiny" secondary>—</Text>;
+                      const details = overrideDetails.get(row.productId) ?? {};
+                      const isOpen = openOverridePopover === row.productId;
+                      return (
+                        <Popover
+                          shown={isOpen}
+                          onClickOutside={() => setOpenOverridePopover(null)}
+                          placement="left"
+                        >
+                          <Popover.Element>
+                            <Badge
+                              size="small"
+                              skin="warning"
+                              onClick={() => setOpenOverridePopover(isOpen ? null : row.productId)}
+                            >
+                              {count} override{count > 1 ? 's' : ''}
+                            </Badge>
+                          </Popover.Element>
+                          <Popover.Content>
+                            <Box direction="vertical" gap="8px" padding="12px" style={{ minWidth: 200 }}>
+                              <Text size="small" weight="bold">GMC Field Overrides</Text>
+                              {Object.entries(details).map(([field, value]) => (
+                                <Box key={field} direction="horizontal" gap="8px" verticalAlign="middle">
+                                  <Text size="tiny" weight="bold" style={{ minWidth: 70 }}>{field}:</Text>
+                                  <Text size="tiny" style={{ flex: 1 }}>{value}</Text>
+                                  <Button
+                                    size="tiny"
+                                    skin="destructive"
+                                    priority="secondary"
+                                    onClick={async () => {
+                                      await appFetch('/api/gmc-overrides', {
+                                        method: 'DELETE',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ productId: row.productId, field }),
+                                      });
+                                      await loadOverrideCounts();
+                                    }}
+                                  >
+                                    Clear
+                                  </Button>
+                                </Box>
+                              ))}
+                            </Box>
+                          </Popover.Content>
+                        </Popover>
+                      );
+                    },
+                    width: '110px',
                   },
                   {
                     title: 'Sync',
