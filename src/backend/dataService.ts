@@ -588,3 +588,116 @@ export async function getBatchProductPlatforms(
   }
   return map;
 }
+
+// ---------------------------------------------------------------------------
+// GMC Field Overrides CRUD
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch all active GMC field overrides for a single product.
+ * Returns a map of field name → override value.
+ */
+export async function getGmcOverrides(
+  productId: string,
+): Promise<Map<string, string>> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('gmc_field_overrides')
+    .select('field_name, override_value')
+    .eq('product_id', productId);
+
+  if (error) throw new Error(`Failed to fetch GMC overrides: ${error.message}`);
+
+  const map = new Map<string, string>();
+  for (const row of data ?? []) {
+    map.set(row.field_name, row.override_value);
+  }
+  return map;
+}
+
+/**
+ * Upsert GMC field overrides for a product.
+ * Merges with existing overrides — does not delete fields not in the payload.
+ */
+export async function upsertGmcOverrides(
+  productId: string,
+  overrides: Record<string, string>,
+): Promise<void> {
+  if (Object.keys(overrides).length === 0) return;
+  const db = await getClient();
+  const rows = Object.entries(overrides).map(([field_name, override_value]) => ({
+    product_id: productId,
+    field_name,
+    override_value,
+    updated_at: new Date().toISOString(),
+  }));
+  const { error } = await db
+    .from('gmc_field_overrides')
+    .upsert(rows, { onConflict: 'product_id,field_name' });
+
+  if (error) throw new Error(`Failed to upsert GMC overrides: ${error.message}`);
+}
+
+/**
+ * Delete a single GMC field override for a product.
+ */
+export async function clearGmcOverride(
+  productId: string,
+  fieldName: string,
+): Promise<void> {
+  const db = await getClient();
+  const { error } = await db
+    .from('gmc_field_overrides')
+    .delete()
+    .eq('product_id', productId)
+    .eq('field_name', fieldName);
+
+  if (error) throw new Error(`Failed to clear GMC override: ${error.message}`);
+}
+
+/**
+ * Fetch override counts for a batch of product IDs.
+ * Returns Map<productId, count>. Products with no overrides are not included.
+ */
+export async function getBatchOverrideCounts(
+  productIds: string[],
+): Promise<Map<string, number>> {
+  if (productIds.length === 0) return new Map();
+  const db = await getClient();
+  const { data, error } = await db
+    .from('gmc_field_overrides')
+    .select('product_id')
+    .in('product_id', productIds);
+
+  if (error) throw new Error(`Failed to fetch override counts: ${error.message}`);
+
+  const counts = new Map<string, number>();
+  for (const row of data ?? []) {
+    counts.set(row.product_id, (counts.get(row.product_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Fetch overrides for a batch of product IDs.
+ * Returns Map<productId, Map<fieldName, overrideValue>>.
+ */
+export async function getBatchGmcOverrides(
+  productIds: string[],
+): Promise<Map<string, Map<string, string>>> {
+  if (productIds.length === 0) return new Map();
+  const db = await getClient();
+  const { data, error } = await db
+    .from('gmc_field_overrides')
+    .select('product_id, field_name, override_value')
+    .in('product_id', productIds);
+
+  if (error) throw new Error(`Failed to fetch batch GMC overrides: ${error.message}`);
+
+  const result = new Map<string, Map<string, string>>();
+  for (const row of data ?? []) {
+    if (!result.has(row.product_id)) result.set(row.product_id, new Map());
+    result.get(row.product_id)!.set(row.field_name, row.override_value);
+  }
+  return result;
+}
