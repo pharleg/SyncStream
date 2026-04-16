@@ -150,7 +150,11 @@ async function exchangeGmcCode(code: string): Promise<void> {
 
 // ─── Connect Tab ─────────────────────────────────────────────────────────
 
-const ConnectTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> = ({ config, onRefresh }) => {
+const ConnectTab: FC<{
+  config: AppConfigData | null;
+  onRefresh: () => void;
+  onTabChange: (tab: string) => void;
+}> = ({ config, onRefresh, onTabChange }) => {
   const [connecting, setConnecting] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [authCode, setAuthCode] = useState('');
@@ -181,13 +185,15 @@ const ConnectTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> = 
       setSuccess(true);
       setAwaitingCode(false);
       setAuthCode('');
-      onRefresh();
+      await onRefresh();
+      // Navigate to Dashboard where setup screen will appear
+      onTabChange('dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Exchange failed');
     } finally {
       setExchanging(false);
     }
-  }, [authCode, onRefresh]);
+  }, [authCode, onRefresh, onTabChange]);
 
   return (
     <Box direction="vertical" gap="24px">
@@ -2623,7 +2629,9 @@ const SyncStreamPage: FC = () => {
               type="compactSide"
             />
 
-            {activeTab === 'connect' && <ConnectTab config={config} onRefresh={loadConfig} />}
+            {activeTab === 'connect' && (
+              <ConnectTab config={config} onRefresh={loadConfig} onTabChange={setActiveTab} />
+            )}
             {activeTab === 'dashboard' && <DashboardTab config={config} onRefresh={loadConfig} onTabChange={setActiveTab} />}
             {activeTab === 'products' && <ProductsTab config={config} onConfigRefresh={loadConfig} />}
             {activeTab === 'mapping' && <MappingTab config={config} />}

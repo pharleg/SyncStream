@@ -41,10 +41,13 @@ export const POST: APIRoute = async ({ request }) => {
         syncEnabled: false,
         lastFullSync: null,
         gmcDataSourceId: dataSourceId,
+        setupScreenShown: false,
       };
     } else {
       config.gmcConnected = true;
       config.gmcDataSourceId = dataSourceId;
+      // Reset setup screen so merchant sees it again on reconnect
+      config.setupScreenShown = false;
     }
     await saveAppConfig(config);
 
