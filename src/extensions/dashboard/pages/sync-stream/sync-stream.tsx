@@ -328,11 +328,15 @@ const ConfirmSetupScreen: FC<{
 
   const handleGoToMapping = useCallback(async () => {
     setSaving(true);
+    let saved = false;
     try {
       await saveDefaults();
+      saved = true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
-      onGoToMapping();
+      if (saved) onGoToMapping();
     }
   }, [saveDefaults, onGoToMapping]);
 
@@ -2064,7 +2068,7 @@ function getDashboardState(
   return 'normal';
 }
 
-const FreshView: FC = () => (
+const FreshView: FC<{ onTabChange: (tab: string) => void }> = ({ onTabChange }) => (
   <Box direction="vertical" gap="16px">
     <SectionHelper appearance="standard">
       <Text weight="bold">Welcome to SyncStream</Text>
@@ -2073,6 +2077,9 @@ const FreshView: FC = () => (
         we'll walk you through setting up your product feed.
       </Text>
     </SectionHelper>
+    <Box>
+      <Button onClick={() => onTabChange('connect')}>Connect Google Merchant Center →</Button>
+    </Box>
   </Box>
 );
 
@@ -2230,7 +2237,7 @@ const DashboardTab: FC<{
   const dashboardState = getDashboardState(config, data);
 
   if (dashboardState === 'fresh') {
-    return <FreshView />;
+    return <FreshView onTabChange={onTabChange} />;
   }
 
   if (dashboardState === 'confirm-setup') {

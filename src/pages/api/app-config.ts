@@ -32,6 +32,8 @@ export const POST: APIRoute = async ({ request }) => {
       fieldMappings?: Record<string, { type: string; wixField?: string; defaultValue?: string }>;
       syncEnabled?: boolean;
       setupScreenShown?: boolean;
+      aiEnhancementEnabled?: boolean;
+      aiEnhancementStyle?: string;
     };
 
     const instanceId = body.instanceId || 'default';
@@ -56,6 +58,12 @@ export const POST: APIRoute = async ({ request }) => {
     }
     if (body.setupScreenShown !== undefined) {
       config.setupScreenShown = body.setupScreenShown;
+    }
+    if (body.aiEnhancementEnabled !== undefined) {
+      config.aiEnhancementEnabled = body.aiEnhancementEnabled;
+    }
+    if (body.aiEnhancementStyle !== undefined) {
+      config.aiEnhancementStyle = body.aiEnhancementStyle;
     }
 
     await saveAppConfig(config);
