@@ -275,7 +275,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete 
         body: JSON.stringify({
           type: 'product',
           productId: currentP2Product.productId,
-          [field === 'title' ? 'title' : 'description']: inputValue.trim(),
+          [field]: inputValue.trim(),
           instanceId: 'default',
         }),
       });
