@@ -13,7 +13,7 @@
  * Response: { success: boolean; error?: string }
  */
 import type { APIRoute } from 'astro';
-import { getAppConfig, saveAppConfig, updateCachedProductFields } from '../../backend/dataService';
+import { getAppConfig, saveAppConfig, updateCachedProductFields, getCachedProductsByIds } from '../../backend/dataService';
 import { applyEnhancementsToWix } from '../../backend/aiEnhancer';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -40,21 +40,29 @@ export const POST: APIRoute = async ({ request }) => {
         });
       }
 
+      // Fetch current cached product to get existing title/description for
+      // fields we are NOT updating — applyEnhancementsToWix sets both fields.
+      const cached = await getCachedProductsByIds(instanceId, [productId]);
+      const existing = cached[0];
+
+      const finalTitle = title ?? (existing?.name ?? '');
+      const finalDescription = description ?? (existing?.plainDescription ?? existing?.description ?? '');
+
       const results = await applyEnhancementsToWix(instanceId, [{
         productId,
-        title: title ?? '',
-        description: description ?? '',
+        title: finalTitle,
+        description: finalDescription,
       }]);
 
       const result = results[0];
       if (!result.success) {
         return new Response(
           JSON.stringify({ success: false, error: result.error ?? 'Wix update failed' }),
-          { headers: { 'Content-Type': 'application/json' } },
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
         );
       }
 
-      // Update products cache
+      // Update products cache for the fields that were explicitly set
       const cacheFields: { name?: string; description?: string; plainDescription?: string } = {};
       if (title) { cacheFields.name = title; }
       if (description) { cacheFields.description = description; cacheFields.plainDescription = description; }
