@@ -162,6 +162,21 @@ const ConnectTab: FC<{
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
+  const [disconnecting, setDisconnecting] = useState(false);
+
+  const handleDisconnectGmc = useCallback(async () => {
+    setDisconnecting(true);
+    setError(null);
+    try {
+      await saveAppConfig({ gmcConnected: false, setupScreenShown: false });
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect');
+    } finally {
+      setDisconnecting(false);
+    }
+  }, [onRefresh]);
+
   const handleConnectGmc = useCallback(async () => {
     setConnecting(true);
     setError(null);
@@ -210,9 +225,17 @@ const ConnectTab: FC<{
           }
           suffix={
             config?.gmcConnected ? (
-              <Text size="small" skin="success" weight="bold">
-                Connected
-              </Text>
+              <Box gap="12px" verticalAlign="middle">
+                <Text size="small" skin="success" weight="bold">Connected</Text>
+                <Button
+                  size="small"
+                  skin="light"
+                  onClick={handleDisconnectGmc}
+                  disabled={disconnecting}
+                >
+                  {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+                </Button>
+              </Box>
             ) : (
               <Button size="small" onClick={handleConnectGmc} disabled={connecting || awaitingCode}>
                 {connecting ? 'Connecting...' : 'Connect'}

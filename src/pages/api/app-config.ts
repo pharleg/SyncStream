@@ -29,6 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json() as {
       instanceId: string;
+      gmcConnected?: boolean;
       fieldMappings?: Record<string, { type: string; wixField?: string; defaultValue?: string }>;
       syncEnabled?: boolean;
       setupScreenShown?: boolean;
@@ -50,6 +51,9 @@ export const POST: APIRoute = async ({ request }) => {
       };
     }
 
+    if (body.gmcConnected !== undefined) {
+      config.gmcConnected = body.gmcConnected;
+    }
     if (body.fieldMappings !== undefined) {
       config.fieldMappings = body.fieldMappings as FieldMappings;
     }
