@@ -2217,8 +2217,10 @@ const DashboardTab: FC<{
   }, [loadData, pollProgress]);
 
   const handleSetupConfirmed = useCallback(async () => {
-    await onRefresh();
+    // Load fresh sync data first (shows loader, hides stale setup-mode state),
+    // then refresh config so getDashboardState sees the new totals together.
     await loadData();
+    await onRefresh();
   }, [onRefresh, loadData]);
 
   const handleGoToMappingFromSetup = useCallback(() => {
