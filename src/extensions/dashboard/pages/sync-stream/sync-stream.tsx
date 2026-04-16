@@ -21,6 +21,7 @@ import {
 import '@wix/design-system/styles.global.css';
 import { httpClient } from '@wix/essentials';
 import { dashboard } from '@wix/dashboard';
+import { FixWizard } from './FixWizard';
 
 async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   const baseUrl = new URL(import.meta.url).origin;
@@ -64,6 +65,7 @@ interface AppConfigData {
   aiEnhancementEnabled?: boolean;
   aiEnhancementStyle?: string;
   setupScreenShown?: boolean;
+  [key: string]: unknown;
 }
 
 interface SyncRecord {
@@ -2173,7 +2175,8 @@ const FIELD_LABELS: Record<string, string> = {
 const SetupModeView: FC<{
   syncSummary: SyncSummary;
   onTabChange: (tab: string) => void;
-}> = ({ syncSummary, onTabChange }) => {
+  onLaunchWizard: () => void;
+}> = ({ syncSummary, onTabChange, onLaunchWizard }) => {
   const hasValidationIssues = syncSummary.issueGroups.length > 0;
   const issueCount = syncSummary.issueGroups.length;
 
@@ -2193,6 +2196,9 @@ const SetupModeView: FC<{
             ? 'Complete the steps below, then sync again to go live.'
             : 'These products were rejected by Google Merchant Center. Check the Products tab for details on each error.'}
         </Text>
+        <Box marginTop="12px">
+          <Button onClick={onLaunchWizard} size="small">Fix Issues →</Button>
+        </Box>
       </SectionHelper>
 
       <Card>
@@ -2270,6 +2276,7 @@ const DashboardTab: FC<{
     syncedCount: number;
     failedCount: number;
   } | null>(null);
+  const [wizardActive, setWizardActive] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -2357,9 +2364,26 @@ const DashboardTab: FC<{
   }
 
   if (dashboardState === 'setup-mode' && data) {
+    if (wizardActive && config) {
+      return (
+        <FixWizard
+          issueGroups={data.issueGroups}
+          config={config}
+          onComplete={async () => {
+            setWizardActive(false);
+            await loadData();
+            await onRefresh();
+          }}
+        />
+      );
+    }
     return (
       <Box direction="vertical" gap="16px">
-        <SetupModeView syncSummary={data} onTabChange={onTabChange} />
+        <SetupModeView
+          syncSummary={data}
+          onTabChange={onTabChange}
+          onLaunchWizard={() => setWizardActive(true)}
+        />
         {/* Still show the Sync Now button so they can re-sync after fixing */}
         <Box>
           <Button onClick={handleSync} disabled={syncing} size="small" skin="light">
