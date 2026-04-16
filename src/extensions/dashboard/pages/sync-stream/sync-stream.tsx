@@ -63,6 +63,7 @@ interface AppConfigData {
   lastFullSync: string | null;
   aiEnhancementEnabled?: boolean;
   aiEnhancementStyle?: string;
+  setupScreenShown?: boolean;
 }
 
 interface SyncRecord {
@@ -252,6 +253,185 @@ const ConnectTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> = 
             </Button>
           }
         />
+      </Card>
+    </Box>
+  );
+};
+
+// ─── Confirm Setup Screen ─────────────────────────────────────────────────
+
+const CONDITION_OPTIONS = [
+  { id: 'new', value: 'New' },
+  { id: 'refurbished', value: 'Refurbished' },
+  { id: 'used', value: 'Used' },
+];
+
+const ConfirmSetupScreen: FC<{
+  config: AppConfigData;
+  onConfirmed: () => void;
+  onGoToMapping: () => void;
+}> = ({ config, onConfirmed, onGoToMapping }) => {
+  const siteInfo = dashboard.getSiteInfo();
+
+  const [brand, setBrand] = useState(
+    config.fieldMappings?.brand?.defaultValue ??
+    (siteInfo as any)?.siteDisplayName ??
+    '',
+  );
+  const [siteUrl, setSiteUrl] = useState(
+    config.fieldMappings?.siteUrl?.defaultValue ??
+    siteInfo?.siteUrl?.replace(/\/$/, '') ??
+    '',
+  );
+  const [condition, setCondition] = useState(
+    config.fieldMappings?.condition?.defaultValue ?? 'new',
+  );
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const saveDefaults = useCallback(async () => {
+    await saveAppConfig({
+      fieldMappings: {
+        ...config.fieldMappings,
+        brand: { type: 'default', defaultValue: brand },
+        siteUrl: { type: 'default', defaultValue: siteUrl },
+        condition: { type: 'default', defaultValue: condition },
+      },
+      setupScreenShown: true,
+    });
+  }, [brand, siteUrl, condition, config.fieldMappings]);
+
+  const handleConfirmAndSync = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveDefaults();
+      setSyncing(true);
+      await triggerSync();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Setup failed');
+    } finally {
+      setSaving(false);
+      setSyncing(false);
+      onConfirmed();
+    }
+  }, [saveDefaults, onConfirmed]);
+
+  const handleGoToMapping = useCallback(async () => {
+    setSaving(true);
+    try {
+      await saveDefaults();
+    } finally {
+      setSaving(false);
+      onGoToMapping();
+    }
+  }, [saveDefaults, onGoToMapping]);
+
+  const brandSource = (siteInfo as any)?.siteDisplayName && !config.fieldMappings?.brand?.defaultValue
+    ? 'from your Wix business name'
+    : null;
+  const urlSource = siteInfo?.siteUrl && !config.fieldMappings?.siteUrl?.defaultValue
+    ? 'from your site settings'
+    : null;
+
+  return (
+    <Box direction="vertical" gap="24px">
+      {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
+
+      <SectionHelper appearance="standard">
+        <Text weight="bold">We found the following from your Wix store</Text>
+        <Text size="small" secondary>Review and confirm — these become the defaults for all your products.</Text>
+      </SectionHelper>
+
+      <Card>
+        <Card.Header title="Step 2 of 3 — Confirm Your Feed Defaults" />
+        <Card.Divider />
+        <Card.Content>
+          <Box direction="vertical" gap="20px">
+            <FormField
+              label="Brand Name"
+              infoContent="Used on all products sent to Google Merchant Center."
+              statusMessage={brandSource ? `Pre-filled ${brandSource}` : undefined}
+              status={brandSource ? 'success' : brand ? undefined : 'warning'}
+            >
+              <Input
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                placeholder="Your brand name"
+              />
+            </FormField>
+
+            <FormField
+              label="Store URL"
+              infoContent="Used to build product links for Google."
+              statusMessage={urlSource ? `Pre-filled ${urlSource}` : undefined}
+              status={urlSource ? 'success' : siteUrl ? undefined : 'warning'}
+            >
+              <Input
+                value={siteUrl}
+                onChange={(e) => setSiteUrl(e.target.value)}
+                placeholder="https://www.yourstore.com"
+              />
+            </FormField>
+
+            <FormField
+              label="Default Product Condition"
+              infoContent="Applied to all products unless overridden per-product."
+            >
+              <Dropdown
+                options={CONDITION_OPTIONS}
+                selectedId={condition}
+                onSelect={(opt) => setCondition(String(opt.id))}
+              />
+            </FormField>
+
+            <Box direction="vertical" gap="8px" paddingTop="8px" style={{ borderTop: '1px solid #eee' }}>
+              <Box gap="12px">
+                <Text size="small" secondary>Products found in your store:</Text>
+                <Text size="small" weight="bold">syncing to Google Merchant Center</Text>
+              </Box>
+            </Box>
+          </Box>
+        </Card.Content>
+        <Card.Divider />
+        <Card.Content>
+          <Box direction="vertical" gap="12px">
+            <Button
+              onClick={handleConfirmAndSync}
+              disabled={saving || syncing || !brand}
+              fullWidth
+            >
+              {syncing ? 'Running first sync…' : saving ? 'Saving…' : 'Looks good — run first sync →'}
+            </Button>
+            <Button
+              skin="light"
+              onClick={handleGoToMapping}
+              disabled={saving}
+              fullWidth
+            >
+              I'll review these in Field Mapping first
+            </Button>
+          </Box>
+        </Card.Content>
+      </Card>
+
+      <Card>
+        <Card.Header
+          title="Optional — set later in Field Mapping"
+          subtitle="These aren't required to start syncing"
+        />
+        <Card.Divider />
+        <Card.Content>
+          <Box direction="vertical" gap="8px">
+            {['GTIN / Barcode', 'Google Product Category', 'MPN'].map((label) => (
+              <Box key={label} verticalAlign="middle" gap="12px">
+                <Text size="small" secondary>{label}</Text>
+                <Badge size="small" skin="neutralLight">skipping for now</Badge>
+              </Box>
+            ))}
+          </Box>
+        </Card.Content>
       </Card>
     </Box>
   );
