@@ -73,12 +73,19 @@ interface SyncRecord {
   errorCount: number;
 }
 
+interface IssueGroup {
+  field: string;
+  count: number;
+  message: string;
+}
+
 interface SyncSummary {
   totalSynced: number;
   totalErrors: number;
   totalPending: number;
   lastFullSync: string | null;
   records: SyncRecord[];
+  issueGroups: IssueGroup[];
 }
 
 async function fetchAppConfig(): Promise<AppConfigData | null> {
@@ -101,7 +108,10 @@ async function saveAppConfig(updates: Record<string, unknown>): Promise<void> {
 
 async function fetchSyncStatus(): Promise<SyncSummary> {
   const response = await appFetch('/api/sync-status?instanceId=default');
-  if (!response.ok) throw new Error('Failed to fetch sync status');
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error((data as any).error ?? 'Failed to fetch sync status');
+  }
   return response.json();
 }
 
@@ -111,7 +121,10 @@ async function triggerSync(): Promise<{ total: number; synced: number; failed: n
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ instanceId: 'default', platforms: ['gmc'] }),
   });
-  if (!response.ok) throw new Error('Sync failed');
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error((data as any).error ?? 'Sync failed');
+  }
   return response.json();
 }
 
