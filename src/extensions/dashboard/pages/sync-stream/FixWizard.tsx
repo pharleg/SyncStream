@@ -1,4 +1,4 @@
-import { type FC, useState, useEffect, useCallback } from 'react';
+import { type FC, type MouseEvent, useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Button,
@@ -626,7 +626,7 @@ const Phase2StepCard: FC<{
                 </Box>
                 <Button
                   size="small"
-                  onClick={(e: React.MouseEvent) => { e.stopPropagation(); onGenerate(); }}
+                  onClick={(e: MouseEvent) => { e.stopPropagation(); onGenerate(); }}
                   disabled={generating}
                 >
                   {generating ? 'Generating…' : 'Generate →'}
