@@ -2209,6 +2209,16 @@ const DashboardTab: FC<{
     }
   }, [loadData, pollProgress]);
 
+  const handleSetupConfirmed = useCallback(async () => {
+    await onRefresh();
+    await loadData();
+  }, [onRefresh, loadData]);
+
+  const handleGoToMappingFromSetup = useCallback(() => {
+    onRefresh();
+    onTabChange('mapping');
+  }, [onRefresh, onTabChange]);
+
   if (loading) {
     return (
       <Box align="center" padding="60px">
@@ -2227,8 +2237,8 @@ const DashboardTab: FC<{
     return (
       <ConfirmSetupScreen
         config={config!}
-        onConfirmed={async () => { onRefresh(); await loadData(); }}
-        onGoToMapping={() => { onRefresh(); onTabChange('mapping'); }}
+        onConfirmed={handleSetupConfirmed}
+        onGoToMapping={handleGoToMappingFromSetup}
       />
     );
   }
