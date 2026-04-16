@@ -954,7 +954,7 @@ interface CachedProductRow {
   description?: string;
   plainDescription?: string;
   brand?: string;
-  syncStatus: { status: string; lastSynced: string } | null;
+  syncStatus: { status: string; lastSynced: string; errorMessages: string[] } | null;
   enhancedDescription: string | null;
   enhancedTitle: string | null;
 }
@@ -1622,11 +1622,15 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                   },
                   {
                     title: 'Description',
-                    render: (row: CachedProductRow) => (
-                      <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-                        {row.plainDescription ?? row.description ?? '—'}
-                      </Text>
-                    ),
+                    render: (row: CachedProductRow) => {
+                      const raw = row.plainDescription ?? row.description ?? '';
+                      const plain = raw.replace(/<[^>]*>/g, '').trim() || '—';
+                      return (
+                        <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
+                          {plain}
+                        </Text>
+                      );
+                    },
                     width: '18%',
                   },
                   {
@@ -1720,8 +1724,12 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
                     title: 'Sync',
                     render: (row: CachedProductRow) => {
                       if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
-                      const skin = row.syncStatus.status === 'synced' ? 'success' : row.syncStatus.status === 'error' ? 'danger' : 'warning';
-                      return <Badge size="small" skin={skin}>{row.syncStatus.status}</Badge>;
+                      const { status, errorMessages } = row.syncStatus;
+                      const skin = status === 'synced' ? 'success' : status === 'error' ? 'danger' : 'warning';
+                      if (status !== 'error' || !errorMessages?.length) {
+                        return <Badge size="small" skin={skin}>{status}</Badge>;
+                      }
+                      return <SyncErrorBadge status={status} errorMessages={errorMessages} />;
                     },
                     width: '70px',
                   },
@@ -2034,6 +2042,27 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
 };
 
 // ─── Dashboard Tab (formerly Status Tab) ────────────────────────────────
+
+const SyncErrorBadge: FC<{ status: string; errorMessages: string[] }> = ({ status, errorMessages }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover shown={open} onClickOutside={() => setOpen(false)} placement="left">
+      <Popover.Element>
+        <Badge size="small" skin="danger" onClick={() => setOpen((v) => !v)} style={{ cursor: 'pointer' }}>
+          {status} ▾
+        </Badge>
+      </Popover.Element>
+      <Popover.Content>
+        <Box direction="vertical" gap="8px" padding="12px" style={{ maxWidth: 340 }}>
+          <Text size="small" weight="bold">Why did this fail?</Text>
+          {errorMessages.map((msg, i) => (
+            <Text key={i} size="tiny">{msg}</Text>
+          ))}
+        </Box>
+      </Popover.Content>
+    </Popover>
+  );
+};
 
 const ErrorCell: FC<{ row: SyncRecord }> = ({ row }) => {
   const [open, setOpen] = useState(false);

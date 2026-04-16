@@ -12,9 +12,13 @@ export const GET: APIRoute = async ({ request }) => {
       querySyncStates(500),
     ]);
 
-    const syncMap = new Map<string, { status: string; lastSynced: string }>();
+    const syncMap = new Map<string, { status: string; lastSynced: string; errorMessages: string[] }>();
     for (const s of syncStates) {
-      syncMap.set(s.productId, { status: s.status, lastSynced: s.lastSynced.toISOString() });
+      syncMap.set(s.productId, {
+        status: s.status,
+        lastSynced: s.lastSynced.toISOString(),
+        errorMessages: Array.isArray(s.errorLog) ? s.errorLog.map((e: any) => e.message as string) : [],
+      });
     }
 
     const productIds = products.map((p) => p.productId);
