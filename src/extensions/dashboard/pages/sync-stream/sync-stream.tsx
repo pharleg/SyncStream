@@ -305,16 +305,18 @@ const ConfirmSetupScreen: FC<{
   const handleConfirmAndSync = useCallback(async () => {
     setSaving(true);
     setError(null);
+    let syncSuccess = false;
     try {
       await saveDefaults();
       setSyncing(true);
       await triggerSync();
+      syncSuccess = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Setup failed');
     } finally {
       setSaving(false);
       setSyncing(false);
-      onConfirmed();
+      if (syncSuccess) onConfirmed();
     }
   }, [saveDefaults, onConfirmed]);
 
