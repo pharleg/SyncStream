@@ -2042,7 +2042,105 @@ const statusColumns = [
   },
 ];
 
-const DashboardTab: FC = () => {
+type DashboardViewState = 'fresh' | 'confirm-setup' | 'setup-mode' | 'normal';
+
+function getDashboardState(
+  config: AppConfigData | null,
+  syncSummary: SyncSummary | null,
+): DashboardViewState {
+  if (!config || !config.gmcConnected) return 'fresh';
+  if (!config.setupScreenShown) return 'confirm-setup';
+  if (
+    syncSummary !== null &&
+    syncSummary.totalSynced === 0 &&
+    syncSummary.totalErrors > 0
+  ) return 'setup-mode';
+  return 'normal';
+}
+
+const FreshView: FC = () => (
+  <Box direction="vertical" gap="16px">
+    <SectionHelper appearance="standard">
+      <Text weight="bold">Welcome to SyncStream</Text>
+      <Text size="small" secondary>
+        Connect your Google Merchant Center account to get started. Once connected,
+        we'll walk you through setting up your product feed.
+      </Text>
+    </SectionHelper>
+  </Box>
+);
+
+const FIELD_LABELS: Record<string, string> = {
+  brand: 'Brand name',
+  siteUrl: 'Store URL',
+  condition: 'Product condition',
+  description: 'Product description',
+  imageLink: 'Product image',
+  link: 'Product link',
+  offerId: 'Product SKU / ID',
+};
+
+const SetupModeView: FC<{
+  syncSummary: SyncSummary;
+  onTabChange: (tab: string) => void;
+}> = ({ syncSummary, onTabChange }) => (
+  <Box direction="vertical" gap="16px">
+    <SectionHelper appearance="warning">
+      <Text weight="bold">
+        {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} found
+        {syncSummary.issueGroups.length === 1
+          ? ' — 1 thing to fix before they can go live'
+          : ` — ${syncSummary.issueGroups.length} things to fix`}
+      </Text>
+      <Text size="small" secondary>
+        Complete the steps below, then sync to go live.
+      </Text>
+    </SectionHelper>
+
+    <Card>
+      <Card.Header title="Setup Checklist" />
+      <Card.Divider />
+      <Card.Content>
+        <Box direction="vertical" gap="12px">
+          {/* Always-complete steps */}
+          {[
+            'Google Merchant Center connected',
+            `${syncSummary.totalErrors + syncSummary.totalSynced} products found in your store`,
+          ].map((label) => (
+            <Box key={label} verticalAlign="middle" gap="12px">
+              <Badge size="small" skin="success">✓</Badge>
+              <Text size="small">{label}</Text>
+            </Box>
+          ))}
+
+          {/* Issue groups */}
+          {syncSummary.issueGroups.map((issue) => (
+            <Box key={issue.field} verticalAlign="middle" gap="12px">
+              <Badge size="small" skin="warning">!</Badge>
+              <Box direction="vertical" style={{ flex: 1 }}>
+                <Text size="small" weight="bold">
+                  {FIELD_LABELS[issue.field] ?? issue.field} not configured
+                </Text>
+                <Text size="tiny" secondary>
+                  Required by Google — affects {issue.count} product{issue.count !== 1 ? 's' : ''}
+                </Text>
+              </Box>
+              <Button size="small" onClick={() => onTabChange('mapping')}>
+                Fix →
+              </Button>
+            </Box>
+          ))}
+        </Box>
+      </Card.Content>
+    </Card>
+  </Box>
+);
+
+const DashboardTab: FC<{
+  config: AppConfigData | null;
+  onRefresh: () => void;
+  onTabChange: (tab: string) => void;
+}> = ({ config, onRefresh, onTabChange }) => {
   const [data, setData] = useState<SyncSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -2113,6 +2211,38 @@ const DashboardTab: FC = () => {
     );
   }
 
+  const dashboardState = getDashboardState(config, data);
+
+  if (dashboardState === 'fresh') {
+    return <FreshView />;
+  }
+
+  if (dashboardState === 'confirm-setup') {
+    return (
+      <ConfirmSetupScreen
+        config={config!}
+        onConfirmed={async () => { onRefresh(); await loadData(); }}
+        onGoToMapping={() => { onRefresh(); onTabChange('mapping'); }}
+      />
+    );
+  }
+
+  if (dashboardState === 'setup-mode' && data) {
+    return (
+      <Box direction="vertical" gap="16px">
+        <SetupModeView syncSummary={data} onTabChange={onTabChange} />
+        {/* Still show the Sync Now button so they can re-sync after fixing */}
+        <Box>
+          <Button onClick={handleSync} disabled={syncing} size="small" skin="light">
+            {syncing ? 'Syncing…' : 'Sync Now'}
+          </Button>
+        </Box>
+        {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
+      </Box>
+    );
+  }
+
+  // normal state — existing JSX below unchanged
   return (
     <Box direction="vertical" gap="24px">
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
@@ -2494,7 +2624,7 @@ const SyncStreamPage: FC = () => {
             />
 
             {activeTab === 'connect' && <ConnectTab config={config} onRefresh={loadConfig} />}
-            {activeTab === 'dashboard' && <DashboardTab />}
+            {activeTab === 'dashboard' && <DashboardTab config={config} onRefresh={loadConfig} onTabChange={setActiveTab} />}
             {activeTab === 'products' && <ProductsTab config={config} onConfigRefresh={loadConfig} />}
             {activeTab === 'mapping' && <MappingTab config={config} />}
             {activeTab === 'settings' && <SettingsTab config={config} onRefresh={loadConfig} />}
