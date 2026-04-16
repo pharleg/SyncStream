@@ -33,7 +33,12 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    const product = cached[0].productData as WixProduct;
+    const product = cached[0].productData as WixProduct | undefined;
+    if (!product) {
+      return new Response(JSON.stringify({ error: 'Product cache entry has no data' }), {
+        status: 404, headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const enhanced = await enhanceProduct(product, instanceId, config?.aiEnhancementStyle);
 
     return new Response(
