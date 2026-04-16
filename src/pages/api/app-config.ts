@@ -31,6 +31,7 @@ export const POST: APIRoute = async ({ request }) => {
       instanceId: string;
       fieldMappings?: Record<string, { type: string; wixField?: string; defaultValue?: string }>;
       syncEnabled?: boolean;
+      setupScreenShown?: boolean;
     };
 
     const instanceId = body.instanceId || 'default';
@@ -53,6 +54,7 @@ export const POST: APIRoute = async ({ request }) => {
     if (body.syncEnabled !== undefined) {
       config.syncEnabled = body.syncEnabled;
     }
+    if (body.setupScreenShown !== undefined) config.setupScreenShown = body.setupScreenShown;
 
     await saveAppConfig(config);
 

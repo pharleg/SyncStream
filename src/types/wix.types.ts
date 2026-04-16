@@ -102,6 +102,8 @@ export interface AppConfig {
   aiEnhancementEnabled?: boolean;
   /** Optional style/tone instructions for AI enhancement. */
   aiEnhancementStyle?: string;
+  /** False until merchant completes the one-time setup confirmation screen. */
+  setupScreenShown?: boolean;
 }
 
 /** Flexible field-mapping model.

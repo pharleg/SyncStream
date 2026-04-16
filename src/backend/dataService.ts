@@ -49,6 +49,7 @@ export async function getAppConfig(
     gmcDataSourceId: data.gmc_data_source_id ?? undefined,
     aiEnhancementEnabled: data.ai_enhancement_enabled ?? false,
     aiEnhancementStyle: data.ai_enhancement_style ?? undefined,
+    setupScreenShown: data.setup_screen_shown ?? false,
   };
 }
 
@@ -69,6 +70,7 @@ export async function saveAppConfig(
         gmc_data_source_id: config.gmcDataSourceId ?? null,
         ai_enhancement_enabled: config.aiEnhancementEnabled ?? false,
         ai_enhancement_style: config.aiEnhancementStyle ?? null,
+        setup_screen_shown: config.setupScreenShown ?? false,
       },
       { onConflict: 'instance_id' },
     );
