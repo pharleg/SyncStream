@@ -1062,6 +1062,10 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
   const [aiStyle, setAiStyle] = useState(_config?.aiEnhancementStyle ?? '');
   const [savingAiStyle, setSavingAiStyle] = useState(false);
 
+  const [wizardActive, setWizardActive] = useState(false);
+  const [wizardIssueGroups, setWizardIssueGroups] = useState<IssueGroup[]>([]);
+  const [launchingWizard, setLaunchingWizard] = useState(false);
+
   const handleSaveAiStyle = useCallback(async (value: string) => {
     setSavingAiStyle(true);
     try {
@@ -1070,6 +1074,21 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
     } catch { /* silent */ }
     finally { setSavingAiStyle(false); }
   }, [_onConfigRefresh]);
+
+  const handleLaunchWizard = useCallback(async () => {
+    setLaunchingWizard(true);
+    try {
+      const res = await appFetch('/api/sync-status?instanceId=default');
+      const data = await res.json();
+      setWizardIssueGroups(data.issueGroups ?? []);
+      setWizardActive(true);
+    } catch {
+      setWizardIssueGroups([]);
+      setWizardActive(true);
+    } finally {
+      setLaunchingWizard(false);
+    }
+  }, []);
 
   const loadOverrideCounts = useCallback(async () => {
     if (products.length === 0) return;
@@ -1459,6 +1478,18 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
 
   return (
     <Box direction="vertical" gap="18px">
+      {wizardActive && _config && (
+        <FixWizard
+          issueGroups={wizardIssueGroups}
+          config={_config}
+          onComplete={async () => {
+            setWizardActive(false);
+            await loadProducts();
+          }}
+        />
+      )}
+      {!wizardActive && (
+      <Box direction="vertical" gap="18px">
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
       {success && <SectionHelper appearance="success">{success}</SectionHelper>}
 
@@ -1490,6 +1521,20 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
 
       {productsSubTab === 'products' && (
         <Box direction="vertical" gap="18px">
+          {products.filter(p => p.syncStatus?.status === 'error').length > 0 && (
+            <Box verticalAlign="middle" gap="12px">
+              <Text size="small" secondary>
+                {products.filter(p => p.syncStatus?.status === 'error').length} product{products.filter(p => p.syncStatus?.status === 'error').length !== 1 ? 's' : ''} have sync errors
+              </Text>
+              <Button
+                size="small"
+                onClick={handleLaunchWizard}
+                disabled={launchingWizard}
+              >
+                {launchingWizard ? 'Loading…' : 'Fix Issues →'}
+              </Button>
+            </Box>
+          )}
           {/* Toolbar */}
           <Box gap="12px" verticalAlign="middle">
             <Button size="small" onClick={handlePull} disabled={pulling}>
@@ -2038,6 +2083,8 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
             </Card>
           )}
         </Box>
+      )}
+      </Box>
       )}
     </Box>
   );
