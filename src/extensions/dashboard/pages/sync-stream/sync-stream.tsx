@@ -72,6 +72,7 @@ interface SyncRecord {
   status: 'synced' | 'error' | 'pending';
   lastSynced: string;
   errorCount: number;
+  errorMessages: string[];
 }
 
 interface IssueGroup {
@@ -2034,6 +2035,37 @@ const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => voi
 
 // ─── Dashboard Tab (formerly Status Tab) ────────────────────────────────
 
+const ErrorCell: FC<{ row: SyncRecord }> = ({ row }) => {
+  const [open, setOpen] = useState(false);
+  if (row.errorCount === 0) return <Text size="small">0</Text>;
+  return (
+    <Popover
+      shown={open}
+      onClickOutside={() => setOpen(false)}
+      placement="left"
+    >
+      <Popover.Element>
+        <Text
+          size="small"
+          skin="error"
+          style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
+          onClick={() => setOpen((v) => !v)}
+        >
+          {row.errorCount} error{row.errorCount !== 1 ? 's' : ''}
+        </Text>
+      </Popover.Element>
+      <Popover.Content>
+        <Box direction="vertical" gap="8px" padding="12px" style={{ maxWidth: 340 }}>
+          <Text size="small" weight="bold">Sync errors</Text>
+          {row.errorMessages.map((msg, i) => (
+            <Text key={i} size="tiny">{msg}</Text>
+          ))}
+        </Box>
+      </Popover.Content>
+    </Popover>
+  );
+};
+
 const statusColumns = [
   {
     title: 'Product ID',
@@ -2066,11 +2098,7 @@ const statusColumns = [
   },
   {
     title: 'Errors',
-    render: (row: SyncRecord) => (
-      <Text size="small" skin={row.errorCount > 0 ? 'error' : 'standard'}>
-        {row.errorCount}
-      </Text>
-    ),
+    render: (row: SyncRecord) => <ErrorCell row={row} />,
     width: '10%',
   },
 ];

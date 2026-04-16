@@ -19,6 +19,9 @@ export const GET: APIRoute = async ({ request }) => {
       status: s.status,
       lastSynced: s.lastSynced.toISOString(),
       errorCount: Array.isArray(s.errorLog) ? s.errorLog.length : 0,
+      errorMessages: Array.isArray(s.errorLog)
+        ? s.errorLog.map((e: any) => e.message as string)
+        : [],
     }));
 
     // Group blocking validation errors by field (skip 'api' errors and warnings)
