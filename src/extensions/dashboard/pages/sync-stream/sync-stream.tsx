@@ -2083,8 +2083,8 @@ function getDashboardState(
 ): DashboardViewState {
   if (!config || !config.gmcConnected) return 'fresh';
   if (!config.setupScreenShown) return 'confirm-setup';
-  // Stay in setup mode until all validation issues are resolved
-  if (syncSummary !== null && syncSummary.issueGroups.length > 0) return 'setup-mode';
+  // Stay in setup mode while there are any sync errors, whether validation or API-level
+  if (syncSummary !== null && syncSummary.totalErrors > 0) return 'setup-mode';
   return 'normal';
 }
 
@@ -2116,58 +2116,85 @@ const FIELD_LABELS: Record<string, string> = {
 const SetupModeView: FC<{
   syncSummary: SyncSummary;
   onTabChange: (tab: string) => void;
-}> = ({ syncSummary, onTabChange }) => (
-  <Box direction="vertical" gap="16px">
-    <SectionHelper appearance="warning">
-      <Text weight="bold">
-        {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} found
-        {syncSummary.issueGroups.length === 1
-          ? ' — 1 thing to fix before they can go live'
-          : ` — ${syncSummary.issueGroups.length} things to fix`}
-      </Text>
-      <Text size="small" secondary>
-        Complete the steps below, then sync to go live.
-      </Text>
-    </SectionHelper>
+}> = ({ syncSummary, onTabChange }) => {
+  const hasValidationIssues = syncSummary.issueGroups.length > 0;
+  const issueCount = syncSummary.issueGroups.length;
 
-    <Card>
-      <Card.Header title="Setup Checklist" />
-      <Card.Divider />
-      <Card.Content>
-        <Box direction="vertical" gap="12px">
-          {/* Always-complete steps */}
-          {[
-            'Google Merchant Center connected',
-            `${syncSummary.totalErrors + syncSummary.totalSynced} products found in your store`,
-          ].map((label) => (
-            <Box key={label} verticalAlign="middle" gap="12px">
-              <Badge size="small" skin="success">✓</Badge>
-              <Text size="small">{label}</Text>
-            </Box>
-          ))}
+  return (
+    <Box direction="vertical" gap="16px">
+      <SectionHelper appearance="warning">
+        <Text weight="bold">
+          {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} couldn't sync
+          {hasValidationIssues
+            ? issueCount === 1
+              ? ' — 1 thing to fix'
+              : ` — ${issueCount} things to fix`
+            : ' — review errors in the Products tab'}
+        </Text>
+        <Text size="small" secondary>
+          {hasValidationIssues
+            ? 'Complete the steps below, then sync again to go live.'
+            : 'These products were rejected by Google Merchant Center. Check the Products tab for details on each error.'}
+        </Text>
+      </SectionHelper>
 
-          {/* Issue groups */}
-          {syncSummary.issueGroups.map((issue) => (
-            <Box key={issue.field} verticalAlign="middle" gap="12px">
-              <Badge size="small" skin="warning">!</Badge>
-              <Box direction="vertical" style={{ flex: 1 }}>
-                <Text size="small" weight="bold">
-                  {FIELD_LABELS[issue.field] ?? issue.field} not configured
-                </Text>
-                <Text size="tiny" secondary>
-                  Required by Google — affects {issue.count} product{issue.count !== 1 ? 's' : ''}
-                </Text>
+      <Card>
+        <Card.Header title="Setup Checklist" />
+        <Card.Divider />
+        <Card.Content>
+          <Box direction="vertical" gap="12px">
+            {/* Always-complete steps */}
+            {[
+              'Google Merchant Center connected',
+              `${syncSummary.totalErrors + syncSummary.totalSynced} products found in your store`,
+            ].map((label) => (
+              <Box key={label} verticalAlign="middle" gap="12px">
+                <Badge size="small" skin="success">✓</Badge>
+                <Text size="small">{label}</Text>
               </Box>
-              <Button size="small" onClick={() => onTabChange('mapping')}>
-                Fix →
-              </Button>
-            </Box>
-          ))}
-        </Box>
-      </Card.Content>
-    </Card>
-  </Box>
-);
+            ))}
+
+            {/* Fixable validation issue groups */}
+            {syncSummary.issueGroups.map((issue) => (
+              <Box key={issue.field} verticalAlign="middle" gap="12px">
+                <Badge size="small" skin="warning">!</Badge>
+                <Box direction="vertical" style={{ flex: 1 }}>
+                  <Text size="small" weight="bold">
+                    {FIELD_LABELS[issue.field] ?? issue.field} not configured
+                  </Text>
+                  <Text size="tiny" secondary>
+                    Required by Google — affects {issue.count} product{issue.count !== 1 ? 's' : ''}
+                  </Text>
+                </Box>
+                <Button size="small" onClick={() => onTabChange('mapping')}>
+                  Fix →
+                </Button>
+              </Box>
+            ))}
+
+            {/* API-level errors with no field fix available */}
+            {!hasValidationIssues && (
+              <Box verticalAlign="middle" gap="12px">
+                <Badge size="small" skin="warning">!</Badge>
+                <Box direction="vertical" style={{ flex: 1 }}>
+                  <Text size="small" weight="bold">
+                    {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} rejected by Google
+                  </Text>
+                  <Text size="tiny" secondary>
+                    See the Products tab for specific error details
+                  </Text>
+                </Box>
+                <Button size="small" onClick={() => onTabChange('products')}>
+                  Review →
+                </Button>
+              </Box>
+            )}
+          </Box>
+        </Card.Content>
+      </Card>
+    </Box>
+  );
+};
 
 const DashboardTab: FC<{
   config: AppConfigData | null;
