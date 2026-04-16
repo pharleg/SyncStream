@@ -168,7 +168,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete 
     if (phase === 1 && phase1Steps[p1Idx]) {
       setInputValue(phase1Steps[p1Idx].defaultValue);
     }
-  }, [phase, p1Idx, p2ProdIdx, p2IssueIdx]);
+  }, [phase, p1Idx, p2ProdIdx, p2IssueIdx, phase1Steps]);
 
   // ── Navigation helpers ─────────────────────────────────────────────────
 
