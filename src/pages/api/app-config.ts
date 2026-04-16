@@ -54,7 +54,9 @@ export const POST: APIRoute = async ({ request }) => {
     if (body.syncEnabled !== undefined) {
       config.syncEnabled = body.syncEnabled;
     }
-    if (body.setupScreenShown !== undefined) config.setupScreenShown = body.setupScreenShown;
+    if (body.setupScreenShown !== undefined) {
+      config.setupScreenShown = body.setupScreenShown;
+    }
 
     await saveAppConfig(config);
 
