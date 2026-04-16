@@ -2060,11 +2060,8 @@ function getDashboardState(
 ): DashboardViewState {
   if (!config || !config.gmcConnected) return 'fresh';
   if (!config.setupScreenShown) return 'confirm-setup';
-  if (
-    syncSummary !== null &&
-    syncSummary.totalSynced === 0 &&
-    syncSummary.totalErrors > 0
-  ) return 'setup-mode';
+  // Stay in setup mode until all validation issues are resolved
+  if (syncSummary !== null && syncSummary.issueGroups.length > 0) return 'setup-mode';
   return 'normal';
 }
 
