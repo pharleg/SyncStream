@@ -37,11 +37,9 @@ export const GET: APIRoute = async ({ request }) => {
         }
       }
     }
-    const issueGroups = Array.from(fieldCounts.entries()).map(([field, { count, message }]) => ({
-      field,
-      count,
-      message,
-    }));
+    const issueGroups = Array.from(fieldCounts.entries())
+      .sort(([, a], [, b]) => b.count - a.count)
+      .map(([field, { count, message }]) => ({ field, count, message }));
 
     const totalSynced = records.filter((r) => r.status === 'synced').length;
     const totalErrors = records.filter((r) => r.status === 'error').length;
