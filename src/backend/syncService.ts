@@ -192,15 +192,19 @@ async function syncProductChunk(
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
     const productWarnings = new Map<string, ValidationError[]>();
+    // offerId → parentId: needed so GMC API results can be stored under the
+    // Wix parent product ID (which is how the products table looks up status)
+    const offerIdToParentId = new Map<string, string>();
 
     for (const item of flattened) {
-      const productId = item.product._id ?? item.product.id;
-      const enhanced = enhancedMap.get(productId);
+      const parentId = item.parentId;
+      const enhanced = enhancedMap.get(parentId);
 
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
+      offerIdToParentId.set(gmcProduct.offerId, parentId);
 
       // Apply any stored merchant overrides for this product
-      const overrides = overridesMap.get(productId);
+      const overrides = overridesMap.get(parentId);
       if (overrides && overrides.size > 0) {
         for (const [field, value] of overrides) {
           if (field === 'brand') gmcProduct.productAttributes.brand = value;
@@ -216,7 +220,7 @@ async function syncProductChunk(
 
       if (blockingErrors.length > 0) {
         validationFailures.push({
-          productId: transformed[0].offerId,
+          productId: parentId,
           platform: 'gmc',
           success: false,
           errors: allIssues,
@@ -241,10 +245,11 @@ async function syncProductChunk(
       );
 
       for (const result of batchResults) {
+        const parentId = offerIdToParentId.get(result.offerId) ?? result.offerId;
         if (result.success) {
           const warnings = productWarnings.get(result.offerId) ?? null;
           results.push({
-            productId: result.offerId,
+            productId: parentId,
             platform: 'gmc',
             success: true,
             externalId: result.name,
@@ -252,14 +257,14 @@ async function syncProductChunk(
           });
         } else {
           results.push({
-            productId: result.offerId,
+            productId: parentId,
             platform: 'gmc',
             success: false,
             errors: [{
               field: 'api',
               platform: 'gmc' as const,
               message: result.error ?? 'Unknown error',
-              productId: result.offerId,
+              productId: parentId,
               severity: 'error' as const,
             }],
           });
@@ -361,13 +366,15 @@ export async function syncFromCache(
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
     const productWarnings = new Map<string, ValidationError[]>();
+    const offerIdToParentId = new Map<string, string>();
 
     for (const item of flattened) {
-      const productId = item.product._id ?? item.product.id;
-      const enhanced = enhancedMap.get(productId);
+      const parentId = item.parentId;
+      const enhanced = enhancedMap.get(parentId);
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
+      offerIdToParentId.set(gmcProduct.offerId, parentId);
 
-      const overrides = overridesMap.get(productId);
+      const overrides = overridesMap.get(parentId);
       if (overrides && overrides.size > 0) {
         for (const [field, value] of overrides) {
           if (field === 'brand') gmcProduct.productAttributes.brand = value;
@@ -382,7 +389,7 @@ export async function syncFromCache(
 
       if (blockingErrors.length > 0) {
         validationFailures.push({
-          productId: transformed[0].offerId,
+          productId: parentId,
           platform: 'gmc',
           success: false,
           errors: allIssues,
@@ -406,10 +413,11 @@ export async function syncFromCache(
       );
 
       for (const result of batchResults) {
+        const parentId = offerIdToParentId.get(result.offerId) ?? result.offerId;
         if (result.success) {
           const warnings = productWarnings.get(result.offerId) ?? null;
           results.push({
-            productId: result.offerId,
+            productId: parentId,
             platform: 'gmc',
             success: true,
             externalId: result.name,
@@ -417,14 +425,14 @@ export async function syncFromCache(
           });
         } else {
           results.push({
-            productId: result.offerId,
+            productId: parentId,
             platform: 'gmc',
             success: false,
             errors: [{
               field: 'api',
               platform: 'gmc' as const,
               message: result.error ?? 'Unknown error',
-              productId: result.offerId,
+              productId: parentId,
               severity: 'error' as const,
             }],
           });
