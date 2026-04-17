@@ -27,6 +27,7 @@ import {
   bulkUpsertSyncStates,
   getRules,
   getFilters,
+  getCachedProducts,
   getCachedProductsByIds,
   upsertSyncProgress,
   getBatchProductPlatforms,
@@ -499,8 +500,13 @@ export async function runPaginatedSync(
   await tryProgress(progress);
 
   try {
-    // Fetch entire catalog once
-    const allProducts = await fetchAllProducts();
+    // Use cached products from Supabase — avoids N Wix SDK subrequests per product.
+    // Products are cached by "Pull Products". If cache is empty, bail with a clear message.
+    const cached = await getCachedProducts(instanceId);
+    if (cached.length === 0) {
+      throw new Error('No products in cache. Pull products first before syncing.');
+    }
+    const allProducts: WixProduct[] = cached.map((cp) => cp.productData as WixProduct);
     const totalProducts = allProducts.length;
     progress.totalProducts = totalProducts;
 
