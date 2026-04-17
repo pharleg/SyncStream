@@ -12,12 +12,14 @@ export const GET: APIRoute = async ({ request }) => {
       querySyncStates(500),
     ]);
 
-    const syncMap = new Map<string, { status: string; lastSynced: string; errorMessages: string[] }>();
+    const syncMap = new Map<string, { status: string; lastSynced: string; errorMessages: string[]; errorLog: Array<{ field: string; message: string; severity: string; platform: string }> }>();
     for (const s of syncStates) {
+      const log = Array.isArray(s.errorLog) ? s.errorLog as Array<{ field: string; message: string; severity: string; platform: string }> : [];
       syncMap.set(s.productId, {
         status: s.status,
         lastSynced: s.lastSynced.toISOString(),
-        errorMessages: Array.isArray(s.errorLog) ? s.errorLog.map((e: any) => e.message as string) : [],
+        errorMessages: log.map((e) => e.message),
+        errorLog: log,
       });
     }
 

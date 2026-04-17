@@ -102,11 +102,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete 
     const load = async () => {
       try {
         setLoadingCompliance(true);
-        const res = await appFetch('/api/compliance-check', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instanceId: 'default', platform: 'gmc' }),
-        });
+        const res = await appFetch('/api/products?instanceId=default');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
@@ -124,22 +120,22 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete 
           }));
         setPhase1Steps(p1);
 
-        // Derive Phase 2 steps from compliance results (depth-first per product)
-        const p2: Phase2ProductStep[] = (data.results ?? [])
-          .filter((r: any) => !r.compliant || r.errors?.length > 0)
-          .map((r: any) => {
-            const errors: Array<{ field: string; message: string; severity: string }> = r.errors ?? [];
-            const issues = errors
-              .filter((e) => e.severity === 'error')
+        // Derive Phase 2 steps from stored sync errors (depth-first per product)
+        const p2: Phase2ProductStep[] = (data.products ?? [])
+          .filter((p: any) => p.syncStatus?.status === 'error')
+          .map((p: any) => {
+            const log: Array<{ field: string; message: string; severity: string }> =
+              p.syncStatus?.errorLog ?? [];
+            const issues = log
+              .filter((e) => !e.severity || e.severity === 'error')
               .map((e) => ({
                 field: e.field,
                 errorMessage: e.message,
                 isImageField: IMAGE_FIELDS.has(e.field),
               }));
-
             return {
-              productId: r.productId,
-              productName: r.offerId ?? r.productId,
+              productId: p.productId,
+              productName: (p.productData as any)?.name ?? p.productId,
               issues,
             };
           })
