@@ -21,8 +21,7 @@ import { applyFilters } from './filterEngine';
 import { applyRules } from './rulesEngine';
 import { enhanceProducts } from './aiEnhancer';
 import {
-  getValidGmcAccessToken,
-  getGmcTokens,
+  getValidGmcTokens,
 } from './oauthService';
 import {
   getAppConfig,
@@ -165,8 +164,8 @@ async function syncProductChunk(
       );
     }
 
-    const accessToken = await getValidGmcAccessToken(instanceId);
-    const tokens = await getGmcTokens(instanceId);
+    const tokens = await getValidGmcTokens(instanceId);
+    const accessToken = tokens.accessToken;
     const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
 
     // 2. Apply filters
@@ -353,8 +352,8 @@ export async function syncFromCache(
       throw new Error('GMC not connected. Please connect your account first.');
     }
 
-    const accessToken = await getValidGmcAccessToken(instanceId);
-    const tokens = await getGmcTokens(instanceId);
+    const tokens = await getValidGmcTokens(instanceId);
+    const accessToken = tokens.accessToken;
     const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
 
     const filters = await getFilters(instanceId, 'gmc');
@@ -498,25 +497,19 @@ export async function runPaginatedSync(
     const allProducts = await fetchAllProducts();
     const totalProducts = allProducts.length;
     progress.totalProducts = totalProducts;
-    await tryProgress(progress);
 
     // Process in chunks
     for (let offset = 0; offset < totalProducts; offset += MAX_PRODUCTS_PER_SYNC) {
       const chunk = allProducts.slice(offset, offset + MAX_PRODUCTS_PER_SYNC);
       const result = await syncProductChunk(instanceId, chunk, platforms);
-
       allResults.push(...result.results);
-
-      progress.processed = Math.min(offset + MAX_PRODUCTS_PER_SYNC, totalProducts);
-      progress.syncedCount = allResults.filter((r) => r.success).length;
-      progress.failedCount = allResults.filter((r) => !r.success).length;
-      progress.updatedAt = new Date().toISOString();
-
-      await tryProgress(progress);
     }
 
     progress.currentStatus = 'completed';
     progress.processed = totalProducts;
+    progress.syncedCount = allResults.filter((r) => r.success).length;
+    progress.failedCount = allResults.filter((r) => !r.success).length;
+    progress.updatedAt = new Date().toISOString();
     await tryProgress(progress);
   } catch (error) {
     progress.currentStatus = 'error';

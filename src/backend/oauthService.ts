@@ -186,6 +186,22 @@ export async function getValidGmcAccessToken(
   return refreshGmcTokens(instanceId);
 }
 
+/**
+ * Returns the full GmcTokens with a guaranteed-valid access token.
+ * Use instead of calling getValidGmcAccessToken + getGmcTokens separately
+ * to avoid duplicate Secrets Manager subrequests.
+ */
+export async function getValidGmcTokens(
+  instanceId: string,
+): Promise<GmcTokens> {
+  const tokens = await getGmcTokens(instanceId);
+  if (Date.now() < tokens.expiresAt - 60_000) {
+    return tokens;
+  }
+  const accessToken = await refreshGmcTokens(instanceId);
+  return { ...tokens, accessToken };
+}
+
 export async function initiateMetaOAuth(
   _instanceId: string,
 ): Promise<string> {
