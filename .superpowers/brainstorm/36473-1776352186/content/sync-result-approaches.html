@@ -1,0 +1,138 @@
+<style>
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .mockup { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fff; }
+  .mockup-header { background: #f5f5f5; padding: 8px 14px; font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e0e0e0; }
+  .mockup-body { padding: 16px; font-size: 13px; }
+
+  /* Wix-ish UI atoms */
+  .banner-success { background: #e6f6ee; border: 1px solid #a8d9bc; border-radius: 6px; padding: 10px 14px; color: #1a6b3c; font-size: 12px; margin-bottom: 12px; }
+  .banner-warn { background: #fff8e6; border: 1px solid #f5cc6a; border-radius: 6px; padding: 10px 14px; color: #7a5500; font-size: 12px; margin-bottom: 12px; }
+  .banner-setup { background: #f0f4ff; border: 1px solid #b3c6ff; border-radius: 6px; padding: 12px 14px; color: #1a3a8f; font-size: 12px; margin-bottom: 12px; }
+  .btn-primary { background: #116dff; color: #fff; border: none; border-radius: 20px; padding: 7px 18px; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 12px; }
+  .btn-sm { background: #116dff; color: #fff; border: none; border-radius: 14px; padding: 4px 12px; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .btn-ghost { background: transparent; color: #116dff; border: 1px solid #116dff; border-radius: 14px; padding: 4px 12px; font-size: 11px; font-weight: 600; cursor: pointer; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 12px; }
+  .stat { border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; text-align: center; }
+  .stat-num { font-size: 18px; font-weight: 700; color: #111; }
+  .stat-num.error { color: #c0392b; }
+  .stat-num.success { color: #1a6b3c; }
+  .stat-label { font-size: 10px; color: #888; margin-top: 1px; }
+  .table-header { display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr 0.5fr; gap: 4px; padding: 6px 8px; background: #f7f7f7; border-radius: 4px 4px 0 0; font-size: 10px; font-weight: 600; color: #888; text-transform: uppercase; border: 1px solid #eee; }
+  .table-row { display: grid; grid-template-columns: 2fr 1fr 1fr 1.5fr 0.5fr; gap: 4px; padding: 7px 8px; border: 1px solid #eee; border-top: none; font-size: 11px; align-items: center; }
+  .badge { display: inline-block; padding: 2px 7px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .badge-error { background: #fce8e6; color: #c0392b; }
+  .badge-gmc { background: #e8f0fe; color: #1a56db; }
+  .badge-success { background: #e6f6ee; color: #1a6b3c; }
+  .setup-step { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 6px; margin-bottom: 8px; }
+  .setup-step.done { border-color: #a8d9bc; background: #f6fcf9; }
+  .setup-step.todo { border-color: #f5cc6a; background: #fffdf4; }
+  .step-icon { width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; margin-top: 1px; }
+  .step-icon.done { background: #a8d9bc; color: #1a6b3c; }
+  .step-icon.todo { background: #f5cc6a; color: #7a5500; }
+  .step-body { flex: 1; }
+  .step-title { font-weight: 600; font-size: 12px; color: #111; }
+  .step-desc { font-size: 11px; color: #666; margin-top: 2px; }
+  .step-action { flex-shrink: 0; }
+  .issue-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border: 1px solid #f0c0be; border-radius: 6px; margin-bottom: 6px; background: #fff9f9; }
+  .issue-label { font-size: 12px; color: #333; }
+  .issue-count { font-size: 11px; color: #c0392b; font-weight: 600; background: #fce8e6; padding: 2px 7px; border-radius: 10px; margin-right: 8px; }
+  .section-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #999; margin: 10px 0 6px; }
+</style>
+
+<h2>Post-Sync Result — Two Approaches</h2>
+<p class="subtitle">Both address the "feels broken" problem — different levels of redesign</p>
+
+<div class="split">
+
+  <!-- APPROACH A -->
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Smart Banner + Grouped Issues</h3>
+      <p>Keep the current layout. Replace the misleading "failed" banner with setup-aware messaging, and collapse the error table into a grouped issues list above it.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Dashboard — after first sync</div>
+        <div class="mockup-body">
+          <div class="banner-setup">
+            <strong>Almost ready to go live</strong> — 18 products mapped, 1 thing to configure before they can push to Google.
+          </div>
+          <button class="btn-primary">Sync Now</button>
+          <div class="stats">
+            <div class="stat"><div class="stat-num">0</div><div class="stat-label">Live</div></div>
+            <div class="stat"><div class="stat-num" style="color:#e67e22">18</div><div class="stat-label">Need Setup</div></div>
+            <div class="stat"><div class="stat-num">0</div><div class="stat-label">Pending</div></div>
+            <div class="stat"><div class="stat-num" style="font-size:12px">Never</div><div class="stat-label">Last Sync</div></div>
+          </div>
+          <div class="section-label">Setup needed (blocks sync)</div>
+          <div class="issue-row">
+            <div>
+              <span class="issue-label">Brand not configured</span>
+              <div style="font-size:10px;color:#888;margin-top:2px">Required by Google Merchant Center</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="issue-count">18 products</span>
+              <button class="btn-sm">Fix →</button>
+            </div>
+          </div>
+          <div class="section-label">Sync records</div>
+          <div class="table-header"><span>Product</span><span>Platform</span><span>Status</span><span>Last Synced</span><span>Err</span></div>
+          <div class="table-row"><span style="color:#999">af654225…</span><span><span class="badge badge-gmc">GMC</span></span><span><span class="badge badge-error">BLOCKED</span></span><span style="color:#999">–</span><span style="color:#c0392b">1</span></div>
+          <div class="table-row"><span style="color:#999">ca71fee6…</span><span><span class="badge badge-gmc">GMC</span></span><span><span class="badge badge-error">BLOCKED</span></span><span style="color:#999">–</span><span style="color:#c0392b">1</span></div>
+          <div class="table-row" style="background:#f9f9f9;color:#aaa;font-size:10px;justify-items:center"><span colspan="5">+ 16 more</span></div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Minimal code change</li><li>Familiar layout, same tab</li><li>Groups errors intelligently</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>Still two places to look (banner + table)</li><li>Table still feels like a failure list</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- APPROACH B -->
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Setup Checklist Mode</h3>
+      <p>When the first sync finds only validation errors, flip the dashboard into a "feed setup" checklist. Once setup is complete, it transitions to the normal sync status view.</p>
+      <div class="mockup" style="margin-top:12px">
+        <div class="mockup-header">Dashboard — setup mode (first sync)</div>
+        <div class="mockup-body">
+          <div class="banner-setup">
+            <strong>Feed setup in progress</strong> — complete these steps and your products will sync automatically.
+          </div>
+          <div class="setup-step done">
+            <div class="step-icon done">✓</div>
+            <div class="step-body">
+              <div class="step-title">Google Merchant Center connected</div>
+              <div class="step-desc">OAuth authorized, data source created</div>
+            </div>
+          </div>
+          <div class="setup-step done">
+            <div class="step-icon done">✓</div>
+            <div class="step-body">
+              <div class="step-title">18 products found in your store</div>
+              <div class="step-desc">All products mapped and ready to push</div>
+            </div>
+          </div>
+          <div class="setup-step todo">
+            <div class="step-icon todo">!</div>
+            <div class="step-body">
+              <div class="step-title">Set your brand name</div>
+              <div class="step-desc">Required by Google — applies to all products. Takes 30 seconds.</div>
+            </div>
+            <div class="step-action"><button class="btn-sm">Set Brand →</button></div>
+          </div>
+          <div style="margin-top:14px;padding:10px;background:#f7f7f7;border-radius:6px;font-size:11px;color:#666;text-align:center">
+            Once brand is set, click <strong>Sync Now</strong> — all 18 products will go live.
+          </div>
+        </div>
+      </div>
+      <div class="pros-cons" style="margin-top:10px">
+        <div class="pros"><h4>Pros</h4><ul><li>Single focused action</li><li>Progress feels real (2 of 3 done)</li><li>"Set Brand →" links directly to Field Mapping</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>More logic to detect "setup mode" vs "running mode"</li><li>Transition point needs defining</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+<p class="subtitle" style="margin-top:16px;text-align:center">Click your preference, or tell me in the terminal if you want a hybrid of both</p>

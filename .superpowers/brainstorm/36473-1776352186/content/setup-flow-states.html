@@ -1,0 +1,151 @@
+<style>
+  .flow { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; font-size: 22px; color: #bbb; padding-top: 60px; }
+  .mockup { border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; background: #fff; }
+  .mockup-header { background: #f5f5f5; padding: 8px 14px; font-size: 11px; font-weight: 600; color: #666; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; justify-content: space-between; }
+  .mockup-state { font-size: 10px; padding: 2px 8px; border-radius: 10px; font-weight: 700; }
+  .state-fresh { background: #e8f0fe; color: #1a56db; }
+  .state-setup { background: #fff3cd; color: #856404; }
+  .state-ready { background: #d1fae5; color: #065f46; }
+  .mockup-body { padding: 14px; font-size: 13px; }
+
+  .btn-primary { background: #116dff; color: #fff; border: none; border-radius: 20px; padding: 8px 0; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 10px; }
+  .btn-success { background: #00a651; color: #fff; border: none; border-radius: 20px; padding: 8px 0; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 10px; }
+  .btn-ghost { background: #fff; color: #116dff; border: 1px solid #116dff; border-radius: 20px; padding: 7px 0; font-size: 12px; font-weight: 600; cursor: pointer; width: 100%; margin-bottom: 10px; }
+
+  .banner { border-radius: 6px; padding: 10px 12px; font-size: 12px; margin-bottom: 10px; line-height: 1.4; }
+  .banner-neutral { background: #f0f4ff; border: 1px solid #c7d7ff; color: #1a3a8f; }
+  .banner-setup { background: #fff8e6; border: 1px solid #f5cc6a; color: #7a5500; }
+  .banner-success { background: #e6f6ee; border: 1px solid #a8d9bc; color: #1a6b3c; }
+
+  .stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; margin-bottom: 10px; }
+  .stat { border: 1px solid #e0e0e0; border-radius: 6px; padding: 8px; text-align: center; }
+  .stat-num { font-size: 16px; font-weight: 700; color: #111; }
+  .stat-label { font-size: 10px; color: #888; }
+
+  .setup-step { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 6px; margin-bottom: 6px; border: 1px solid; }
+  .setup-step.done { border-color: #a8d9bc; background: #f6fcf9; }
+  .setup-step.todo { border-color: #f5cc6a; background: #fffdf4; }
+  .setup-step.ready { border-color: #a8d9bc; background: #f6fcf9; }
+  .step-icon { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; flex-shrink: 0; margin-top: 1px; font-weight: 700; }
+  .step-icon.done { background: #a8d9bc; color: #1a6b3c; }
+  .step-icon.todo { background: #f5cc6a; color: #7a5500; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-title { font-weight: 600; font-size: 11px; color: #111; }
+  .step-desc { font-size: 10px; color: #666; margin-top: 1px; }
+  .step-action { flex-shrink: 0; }
+  .btn-fix { background: #116dff; color: #fff; border: none; border-radius: 10px; padding: 3px 9px; font-size: 10px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+  .placeholder-chart { background: #f5f5f5; border-radius: 6px; height: 60px; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; margin-bottom: 10px; }
+
+  .step-num { font-size: 11px; font-weight: 700; color: #116dff; margin-bottom: 6px; }
+  .step-caption { font-size: 11px; color: #666; margin-top: 8px; line-height: 1.4; text-align: center; }
+
+  .confetti-banner { background: linear-gradient(135deg, #e6f6ee, #f0f4ff); border: 1px solid #a8d9bc; border-radius: 6px; padding: 12px; text-align: center; margin-bottom: 10px; }
+  .confetti-banner .emoji { font-size: 20px; }
+  .confetti-banner .title { font-weight: 700; font-size: 13px; color: #111; margin-top: 4px; }
+  .confetti-banner .sub { font-size: 11px; color: #555; margin-top: 2px; }
+</style>
+
+<h2>The Three-State Setup Flow</h2>
+<p class="subtitle">Merchant journey from fresh install → issues found → ready to go live</p>
+
+<div class="flow">
+
+  <!-- STATE 1 -->
+  <div>
+    <div class="step-num">State 1 — Fresh install</div>
+    <div class="mockup">
+      <div class="mockup-header">Dashboard <span class="mockup-state state-fresh">NEW</span></div>
+      <div class="mockup-body">
+        <div class="banner banner-neutral">
+          <strong>Welcome to SyncStream</strong><br>
+          Run your first sync to see how your products look to Google and Meta.
+        </div>
+        <button class="btn-primary">Run First Sync →</button>
+        <div class="stats">
+          <div class="stat"><div class="stat-num">–</div><div class="stat-label">Products</div></div>
+          <div class="stat"><div class="stat-num">–</div><div class="stat-label">Live</div></div>
+        </div>
+        <div class="placeholder-chart">Sync history will appear here</div>
+      </div>
+    </div>
+    <div class="step-caption">Clean, low-pressure. One clear CTA. No scary error states yet.</div>
+  </div>
+
+  <!-- STATE 2 -->
+  <div>
+    <div class="step-num">State 2 — Issues found</div>
+    <div class="mockup">
+      <div class="mockup-header">Dashboard <span class="mockup-state state-setup">SETUP</span></div>
+      <div class="mockup-body">
+        <div class="banner banner-setup">
+          <strong>18 products found — 1 thing to fix</strong><br>
+          Complete the steps below, then sync to go live.
+        </div>
+
+        <div class="setup-step done">
+          <div class="step-icon done">✓</div>
+          <div class="step-body">
+            <div class="step-title">Google Merchant Center connected</div>
+            <div class="step-desc">Data source ready</div>
+          </div>
+        </div>
+
+        <div class="setup-step done">
+          <div class="step-icon done">✓</div>
+          <div class="step-body">
+            <div class="step-title">18 products found in your store</div>
+            <div class="step-desc">All mapped and ready to push</div>
+          </div>
+        </div>
+
+        <div class="setup-step todo">
+          <div class="step-icon todo">!</div>
+          <div class="step-body">
+            <div class="step-title">Set your brand name</div>
+            <div class="step-desc">Required by Google for all products</div>
+          </div>
+          <div class="step-action"><button class="btn-fix">Fix →</button></div>
+        </div>
+
+        <button class="btn-ghost" style="margin-top:4px">Sync Now</button>
+        <div style="font-size:10px;color:#aaa;text-align:center;margin-top:-6px">Fix issues above first for best results</div>
+      </div>
+    </div>
+    <div class="step-caption">Issues grouped by type, not by product. One "Fix →" per issue type, not 18 error rows.</div>
+  </div>
+
+  <!-- STATE 3 -->
+  <div>
+    <div class="step-num">State 3 — Ready to go live</div>
+    <div class="mockup">
+      <div class="mockup-header">Dashboard <span class="mockup-state state-ready">READY</span></div>
+      <div class="mockup-body">
+        <div class="confetti-banner">
+          <div class="emoji">🎉</div>
+          <div class="title">Your feed is ready</div>
+          <div class="sub">18 products will sync to Google on next run</div>
+        </div>
+        <button class="btn-success">Sync Now — 18 Products</button>
+
+        <div class="setup-step ready">
+          <div class="step-icon done">✓</div>
+          <div class="step-body"><div class="step-title">Google Merchant Center connected</div></div>
+        </div>
+        <div class="setup-step ready">
+          <div class="step-icon done">✓</div>
+          <div class="step-body"><div class="step-title">18 products found</div></div>
+        </div>
+        <div class="setup-step ready">
+          <div class="step-icon done">✓</div>
+          <div class="step-body"><div class="step-title">Brand set — Lake Erie Clothing</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="step-caption">All green. Sync button says exactly what it'll do. Transitions to normal dashboard after first successful sync.</div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px;text-align:center">Does this flow feel right? Let me know in the terminal — or click a state if something needs changing.</p>

@@ -1,0 +1,172 @@
+<style>
+  .wizard { max-width: 560px; margin: 0 auto; }
+
+  /* Progress bar */
+  .progress-bar { background: #eee; border-radius: 8px; height: 6px; margin-bottom: 6px; }
+  .progress-fill { background: #116dff; border-radius: 8px; height: 6px; transition: width .3s; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 24px; }
+
+  /* Step card */
+  .step-card { border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .step-header { padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0; }
+  .step-phase { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #888; margin-bottom: 4px; }
+  .step-title { font-size: 17px; font-weight: 700; color: #111; margin: 0 0 4px; }
+  .step-sub { font-size: 13px; color: #666; margin: 0; line-height: 1.4; }
+  .step-body { padding: 20px 24px; }
+  .step-footer { padding: 16px 24px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; align-items: center; }
+
+  /* Inputs */
+  .field-label { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+  .badge-auto { background: #d1fae5; color: #065f46; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 8px; text-transform: none; letter-spacing: 0; }
+  .badge-err { background: #fee2e2; color: #991b1b; font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 8px; text-transform: none; letter-spacing: 0; }
+  .field-input { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  .field-hint { font-size: 11px; color: #999; margin-top: 5px; }
+  .affects-badge { background: #f0f4ff; color: #1a3a8f; font-size: 11px; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; }
+
+  /* Error message box */
+  .error-box { background: #fff8f8; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #991b1b; line-height: 1.5; margin-bottom: 16px; }
+  .error-box strong { display: block; margin-bottom: 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: #b91c1c; }
+
+  /* Product mini-card */
+  .product-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #f9f9f9; border-radius: 8px; margin-bottom: 16px; }
+  .product-img { width: 40px; height: 40px; border-radius: 6px; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+  .product-name { font-weight: 600; font-size: 13px; color: #111; }
+  .product-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .product-counter { margin-left: auto; font-size: 11px; color: #aaa; white-space: nowrap; }
+
+  /* Fix actions */
+  .fix-actions { display: flex; flex-direction: column; gap: 10px; }
+  .fix-action { border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 10px; cursor: pointer; transition: border-color .15s, background .15s; }
+  .fix-action:hover { border-color: #116dff; background: #f5f9ff; }
+  .fix-action-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+  .fix-action-title { font-weight: 600; font-size: 13px; color: #111; }
+  .fix-action-sub { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.3; }
+
+  /* Buttons */
+  .btn-primary { background: #116dff; color: #fff; border: none; border-radius: 20px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-light { background: #f5f5f5; color: #555; border: 1px solid #e0e0e0; border-radius: 20px; padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-skip { background: none; border: none; color: #aaa; font-size: 12px; cursor: pointer; margin-left: auto; text-decoration: underline; }
+
+  /* Phase switcher tabs */
+  .phase-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .phase-tab { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 600; color: #888; background: #fff; transition: all .15s; }
+  .phase-tab.active { border-color: #116dff; color: #116dff; background: #f0f5ff; }
+  .phase-tab.done { border-color: #a8d9bc; color: #065f46; background: #f0faf5; }
+  .phase-tab-label { font-size: 10px; font-weight: 400; display: block; margin-top: 2px; color: #aaa; }
+  .phase-tab.done .phase-tab-label { color: #6ee7b7; }
+  .phase-tab.active .phase-tab-label { color: #93c5fd; }
+</style>
+
+<h2>Fix Issues Wizard — Two-Phase Flow</h2>
+<p class="subtitle">Showing two screens: Phase 1 (global field fix) and Phase 2 (per-product fix). Click the tabs to switch.</p>
+
+<div class="wizard">
+
+  <!-- Phase tabs (for demo switching) -->
+  <div class="phase-tabs">
+    <div class="phase-tab done" onclick="show('p1')">
+      ✓ Phase 1
+      <span class="phase-tab-label">Global fixes</span>
+    </div>
+    <div class="phase-tab active" onclick="show('p2')">
+      2 · Phase 2
+      <span class="phase-tab-label">Per-product fixes</span>
+    </div>
+  </div>
+
+  <!-- PHASE 1: Global fix step -->
+  <div id="p1" style="display:none">
+    <div class="progress-bar"><div class="progress-fill" style="width:33%"></div></div>
+    <div class="progress-meta"><span>Step 1 of 3 — Global fixes</span><span>2 more global fixes</span></div>
+
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-phase">Phase 1 — Fix Once, Apply to All</div>
+        <p class="step-title">Brand name isn't set</p>
+        <p class="step-sub">Google requires a brand on every product. Set it once here and it applies to your entire catalog.</p>
+      </div>
+      <div class="step-body">
+        <div class="field-label">
+          Brand Name
+        </div>
+        <input class="field-input" placeholder="e.g. Lake Erie Clothing" value="" />
+        <div class="field-hint">This becomes the default for all products. You can override it per-product later.</div>
+        <div class="affects-badge">⚡ Fixes 18 products at once</div>
+      </div>
+      <div class="step-footer">
+        <button class="btn-primary">Save &amp; Continue →</button>
+        <button class="btn-light">Skip for now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2: Per-product fix step -->
+  <div id="p2" style="display:block">
+    <div class="progress-bar"><div class="progress-fill" style="width:72%"></div></div>
+    <div class="progress-meta"><span>Product 4 of 19 — Per-product fixes</span><span>15 remaining</span></div>
+
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-phase">Phase 2 — Fix Product by Product</div>
+        <div class="product-card">
+          <div class="product-img">🕯️</div>
+          <div>
+            <div class="product-name">Essential Oil Diffuser</div>
+            <div class="product-meta">$119.00 · In Stock · GMC</div>
+          </div>
+          <div class="product-counter">4 / 19</div>
+        </div>
+        <div class="error-box">
+          <strong>Google says:</strong>
+          "The item description is a placeholder and doesn't describe the product accurately. Please update the description to reflect the actual product."
+        </div>
+      </div>
+      <div class="step-body">
+        <p style="font-size:13px;color:#555;margin:0 0 12px">How do you want to fix this?</p>
+        <div class="fix-actions">
+          <div class="fix-action">
+            <div class="fix-action-icon">✨</div>
+            <div>
+              <div class="fix-action-title">Write with AI</div>
+              <div class="fix-action-sub">Claude writes a product description based on the name, price, and category. You review before it's saved.</div>
+            </div>
+          </div>
+          <div class="fix-action">
+            <div class="fix-action-icon">✏️</div>
+            <div>
+              <div class="fix-action-title">Write it myself</div>
+              <div class="fix-action-sub">Type a description here — saved as an override for this product only.</div>
+            </div>
+          </div>
+          <div class="fix-action">
+            <div class="fix-action-icon">🔗</div>
+            <div>
+              <div class="fix-action-title">Fix in Wix</div>
+              <div class="fix-action-sub">Open this product in your Wix dashboard and update it there. Come back and re-sync when done.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="step-footer">
+        <button class="btn-primary">Next product →</button>
+        <button class="btn-skip">Skip this one</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function show(id) {
+  document.getElementById('p1').style.display = 'none';
+  document.getElementById('p2').style.display = 'none';
+  document.getElementById(id).style.display = 'block';
+  document.querySelectorAll('.phase-tab').forEach((t,i) => {
+    t.className = 'phase-tab';
+    if ((id==='p1'&&i===0)||(id==='p2'&&i===1)) t.classList.add('active');
+    else if (id==='p2'&&i===0) t.classList.add('done');
+  });
+}
+</script>
+
+<p class="subtitle" style="text-align:center;margin-top:18px">Click Phase 1 / Phase 2 tabs to see both screens. Does this direction feel right?</p>

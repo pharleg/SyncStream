@@ -474,14 +474,16 @@ export async function runPaginatedSync(
     updatedAt: new Date().toISOString(),
   };
 
-  await upsertSyncProgress(progress);
+  const tryProgress = (p: SyncProgress) => upsertSyncProgress(p).catch(() => {});
+
+  await tryProgress(progress);
 
   try {
     // Fetch entire catalog once
     const allProducts = await fetchAllProducts();
     const totalProducts = allProducts.length;
     progress.totalProducts = totalProducts;
-    await upsertSyncProgress(progress);
+    await tryProgress(progress);
 
     // Process in chunks
     for (let offset = 0; offset < totalProducts; offset += MAX_PRODUCTS_PER_SYNC) {
@@ -495,16 +497,16 @@ export async function runPaginatedSync(
       progress.failedCount = allResults.filter((r) => !r.success).length;
       progress.updatedAt = new Date().toISOString();
 
-      await upsertSyncProgress(progress);
+      await tryProgress(progress);
     }
 
     progress.currentStatus = 'completed';
     progress.processed = totalProducts;
-    await upsertSyncProgress(progress);
+    await tryProgress(progress);
   } catch (error) {
     progress.currentStatus = 'error';
     progress.error = error instanceof Error ? error.message : 'Unknown error';
-    await upsertSyncProgress(progress);
+    await tryProgress(progress);
     throw error;
   }
 

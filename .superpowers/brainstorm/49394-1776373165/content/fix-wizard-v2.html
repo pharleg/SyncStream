@@ -1,0 +1,166 @@
+<style>
+  .wizard { max-width: 560px; margin: 0 auto; }
+
+  .progress-bar { background: #eee; border-radius: 8px; height: 6px; margin-bottom: 6px; }
+  .progress-fill { background: #116dff; border-radius: 8px; height: 6px; }
+  .progress-meta { display: flex; justify-content: space-between; font-size: 11px; color: #888; margin-bottom: 24px; }
+
+  .step-card { border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; background: #fff; }
+  .step-header { padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0; }
+  .step-phase { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: #888; margin-bottom: 4px; }
+  .step-title { font-size: 17px; font-weight: 700; color: #111; margin: 0 0 4px; }
+  .step-sub { font-size: 13px; color: #666; margin: 0; line-height: 1.4; }
+  .step-body { padding: 20px 24px; }
+  .step-footer { padding: 16px 24px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; align-items: center; }
+
+  .field-label { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+  .field-input { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; box-sizing: border-box; }
+  .field-input:focus { outline: none; border-color: #116dff; }
+  .field-textarea { width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 13px; box-sizing: border-box; min-height: 100px; resize: vertical; line-height: 1.5; }
+  .field-textarea:focus { outline: none; border-color: #116dff; }
+  .field-hint { font-size: 11px; color: #999; margin-top: 5px; }
+  .affects-badge { background: #f0f4ff; color: #1a3a8f; font-size: 11px; padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px; margin-top: 12px; }
+
+  .error-box { background: #fff8f8; border: 1px solid #fecaca; border-radius: 8px; padding: 12px 14px; font-size: 12px; color: #991b1b; line-height: 1.5; margin-bottom: 16px; }
+  .error-box strong { display: block; margin-bottom: 3px; font-size: 10px; text-transform: uppercase; letter-spacing: .4px; color: #b91c1c; }
+
+  .product-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: #f9f9f9; border-radius: 8px; margin-bottom: 14px; }
+  .product-img { width: 40px; height: 40px; border-radius: 6px; background: #e5e7eb; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .product-name { font-weight: 600; font-size: 13px; color: #111; }
+  .product-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .product-counter { margin-left: auto; font-size: 11px; color: #aaa; white-space: nowrap; }
+
+  .ai-bar { background: linear-gradient(135deg, #f0f4ff, #fdf4ff); border: 1px solid #c4b5fd; border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; margin-bottom: 12px; cursor: pointer; }
+  .ai-bar:hover { background: linear-gradient(135deg, #e8efff, #f5ecff); }
+  .ai-bar-text { flex: 1; }
+  .ai-bar-title { font-size: 12px; font-weight: 700; color: #5b21b6; }
+  .ai-bar-sub { font-size: 11px; color: #7c3aed; margin-top: 1px; }
+  .ai-bar-btn { background: #7c3aed; color: #fff; border: none; border-radius: 12px; padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+  .apply-note { background: #f0faf5; border: 1px solid #a8d9bc; border-radius: 8px; padding: 10px 14px; font-size: 12px; color: #1a6b3c; display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+
+  .btn-primary { background: #116dff; color: #fff; border: none; border-radius: 20px; padding: 9px 20px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-light { background: #f5f5f5; color: #555; border: 1px solid #e0e0e0; border-radius: 20px; padding: 8px 18px; font-size: 13px; font-weight: 500; cursor: pointer; }
+  .btn-skip { background: none; border: none; color: #aaa; font-size: 12px; cursor: pointer; margin-left: auto; text-decoration: underline; }
+
+  .phase-tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+  .phase-tab { flex: 1; padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px; text-align: center; cursor: pointer; font-size: 12px; font-weight: 600; color: #888; background: #fff; }
+  .phase-tab.active { border-color: #116dff; color: #116dff; background: #f0f5ff; }
+  .phase-tab.done { border-color: #a8d9bc; color: #065f46; background: #f0faf5; }
+  .phase-tab-label { font-size: 10px; font-weight: 400; display: block; margin-top: 2px; color: #aaa; }
+  .phase-tab.done .phase-tab-label { color: #6ee7b7; }
+  .phase-tab.active .phase-tab-label { color: #93c5fd; }
+
+  .ai-preview { background: #fdf9ff; border: 1px solid #ddd6fe; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
+  .ai-preview-label { font-size: 10px; font-weight: 700; color: #7c3aed; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; }
+  .ai-preview-text { font-size: 13px; color: #333; line-height: 1.5; }
+</style>
+
+<h2>Fix Issues Wizard — Edit Here, Sync Everywhere</h2>
+<p class="subtitle">Changes save to SyncStream and write back to Wix automatically. Click tabs to switch phases.</p>
+
+<div class="wizard">
+
+  <div class="phase-tabs">
+    <div class="phase-tab done" id="tab1" onclick="show('p1')">✓ Phase 1 <span class="phase-tab-label">Global fixes</span></div>
+    <div class="phase-tab active" id="tab2" onclick="show('p2')">2 · Phase 2 <span class="phase-tab-label">Per-product fixes</span></div>
+  </div>
+
+  <!-- PHASE 1: Global fix -->
+  <div id="p1" style="display:none">
+    <div class="progress-bar"><div class="progress-fill" style="width:33%"></div></div>
+    <div class="progress-meta"><span>Step 1 of 2 — Global fixes</span><span>1 more after this</span></div>
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-phase">Phase 1 — Fix Once, Apply to All</div>
+        <p class="step-title">Brand name isn't set</p>
+        <p class="step-sub">Google requires a brand on every product. Set it once here — we'll apply it to all products and sync back to Wix.</p>
+      </div>
+      <div class="step-body">
+        <div class="field-label">Brand Name</div>
+        <input class="field-input" placeholder="e.g. Lake Erie Clothing" />
+        <div class="field-hint">This becomes the default for all products. You can override it per-product later.</div>
+        <div class="affects-badge">⚡ Fixes 18 products at once</div>
+        <div class="apply-note" style="margin-top:14px">
+          ✓ Saves here and writes back to your Wix products automatically
+        </div>
+      </div>
+      <div class="step-footer">
+        <button class="btn-primary">Save &amp; Continue →</button>
+        <button class="btn-skip">Skip for now</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PHASE 2: Per-product fix -->
+  <div id="p2" style="display:block">
+    <div class="progress-bar"><div class="progress-fill" style="width:68%"></div></div>
+    <div class="progress-meta"><span>Product 4 of 19 — Per-product fixes</span><span>15 remaining</span></div>
+    <div class="step-card">
+      <div class="step-header">
+        <div class="step-phase">Phase 2 — Fix Product by Product</div>
+        <div class="product-card">
+          <div class="product-img">🕯️</div>
+          <div>
+            <div class="product-name">Essential Oil Diffuser</div>
+            <div class="product-meta">$119.00 · In Stock · GMC</div>
+          </div>
+          <div class="product-counter">4 / 19</div>
+        </div>
+        <div class="error-box">
+          <strong>Google says:</strong>
+          "The item description is a placeholder and doesn't describe the product accurately. Please update the description to reflect the actual product."
+        </div>
+      </div>
+      <div class="step-body">
+        <!-- AI suggestion bar -->
+        <div class="ai-bar" onclick="showAI()">
+          <div style="font-size:20px">✨</div>
+          <div class="ai-bar-text">
+            <div class="ai-bar-title">Write with AI</div>
+            <div class="ai-bar-sub">Claude writes a description based on the product name and category — you review it first</div>
+          </div>
+          <button class="ai-bar-btn">Generate →</button>
+        </div>
+
+        <!-- AI preview (hidden by default, shown after click) -->
+        <div id="ai-result" style="display:none">
+          <div class="ai-preview">
+            <div class="ai-preview-label">✨ AI Suggestion — edit before saving</div>
+            <div class="ai-preview-text">Elevate your space with this ultrasonic essential oil diffuser. Produces a fine, cool mist that disperses your favorite essential oils for up to 6 hours. Features a whisper-quiet motor, 7-color ambient light, and automatic shut-off. Perfect for home, office, or yoga studio.</div>
+          </div>
+        </div>
+
+        <!-- Manual edit -->
+        <div class="field-label" style="margin-top:4px">Description <span style="font-weight:400;color:#aaa;text-transform:none;letter-spacing:0;font-size:11px">— or write your own</span></div>
+        <textarea class="field-textarea" id="desc-field" placeholder="Describe this product for Google shoppers…"></textarea>
+        <div class="apply-note">
+          ✓ Saves here and writes back to your Wix product automatically
+        </div>
+      </div>
+      <div class="step-footer">
+        <button class="btn-primary">Save &amp; Next →</button>
+        <button class="btn-light">Skip this product</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function show(id) {
+  ['p1','p2'].forEach(p => document.getElementById(p).style.display = 'none');
+  document.getElementById(id).style.display = 'block';
+  document.getElementById('tab1').className = 'phase-tab' + (id==='p1' ? ' active' : ' done');
+  document.getElementById('tab2').className = 'phase-tab' + (id==='p2' ? ' active' : '');
+}
+function showAI() {
+  const r = document.getElementById('ai-result');
+  r.style.display = r.style.display === 'none' ? 'block' : 'none';
+  if (r.style.display === 'block') {
+    document.getElementById('desc-field').value = 'Elevate your space with this ultrasonic essential oil diffuser. Produces a fine, cool mist that disperses your favorite essential oils for up to 6 hours. Features a whisper-quiet motor, 7-color ambient light, and automatic shut-off. Perfect for home, office, or yoga studio.';
+  }
+}
+</script>
+
+<p class="subtitle" style="text-align:center;margin-top:18px">Click "Generate →" to see AI in action. Does this flow feel right?</p>

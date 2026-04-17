@@ -1,0 +1,157 @@
+<style>
+  .flow { display: grid; grid-template-columns: 1fr 24px 1fr 24px 1fr; gap: 0; align-items: start; margin-bottom: 24px; }
+  .flow-arrow { display: flex; align-items: center; justify-content: center; padding-top: 52px; color: #ccc; font-size: 18px; }
+  .flow-step { text-align: center; }
+  .flow-step-num { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #aaa; margin-bottom: 4px; }
+  .flow-step-label { font-size: 11px; font-weight: 600; color: #555; }
+  .flow-step.active .flow-step-label { color: #116dff; }
+  .flow-step.done .flow-step-label { color: #00a651; }
+  .flow-dot { width: 28px; height: 28px; border-radius: 50%; margin: 6px auto; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+  .flow-dot.done { background: #d1fae5; color: #065f46; }
+  .flow-dot.active { background: #116dff; color: #fff; }
+  .flow-dot.pending { background: #f0f0f0; color: #aaa; }
+
+  .mockup { border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; background: #fff; max-width: 480px; margin: 0 auto; }
+  .mockup-header { background: #f5f5f5; padding: 10px 16px; font-size: 12px; font-weight: 600; color: #555; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 8px; }
+  .mockup-body { padding: 20px; }
+
+  .scan-banner { background: #f0f4ff; border: 1px solid #c7d7ff; border-radius: 8px; padding: 14px 16px; margin-bottom: 18px; display: flex; align-items: flex-start; gap: 10px; }
+  .scan-icon { font-size: 20px; flex-shrink: 0; }
+  .scan-title { font-weight: 700; font-size: 13px; color: #1a3a8f; }
+  .scan-sub { font-size: 12px; color: #4a6fa5; margin-top: 2px; line-height: 1.4; }
+
+  .field-group { margin-bottom: 16px; }
+  .field-label { font-size: 11px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+  .field-source { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 8px; text-transform: none; letter-spacing: 0; }
+  .source-auto { background: #d1fae5; color: #065f46; }
+  .source-default { background: #e8f0fe; color: #1a56db; }
+  .source-missing { background: #fef3c7; color: #92400e; }
+  .field-input { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; color: #111; box-sizing: border-box; background: #fff; }
+  .field-input.auto { border-color: #a8d9bc; background: #f6fcf9; }
+  .field-input.missing { border-color: #f5cc6a; background: #fffdf4; color: #aaa; }
+  .field-hint { font-size: 10px; color: #888; margin-top: 4px; }
+
+  .divider { border: none; border-top: 1px solid #eee; margin: 16px 0; }
+
+  .readonly-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; border-bottom: 1px solid #f0f0f0; font-size: 12px; }
+  .readonly-row:last-child { border-bottom: none; }
+  .readonly-key { color: #777; }
+  .readonly-val { font-weight: 600; color: #111; }
+
+  .optional-section { background: #f9f9f9; border: 1px solid #eee; border-radius: 6px; padding: 12px; margin-bottom: 16px; }
+  .optional-title { font-size: 11px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 8px; }
+  .optional-row { display: flex; justify-content: space-between; align-items: center; font-size: 12px; padding: 4px 0; }
+  .optional-key { color: #666; }
+  .skip-tag { font-size: 10px; color: #aaa; }
+
+  .btn-primary { background: #116dff; color: #fff; border: none; border-radius: 20px; padding: 10px 0; font-size: 13px; font-weight: 600; cursor: pointer; width: 100%; }
+  .btn-link { background: none; border: none; color: #888; font-size: 11px; cursor: pointer; width: 100%; margin-top: 8px; text-decoration: underline; }
+
+  .legend { display: flex; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #555; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+
+<h2>Feed Setup — Confirm Your Defaults</h2>
+<p class="subtitle">Appears once, right after GMC connects. We've pre-filled everything we could find.</p>
+
+<!-- Progress indicator -->
+<div class="flow">
+  <div class="flow-step done">
+    <div class="flow-step-num">Step 1</div>
+    <div class="flow-dot done">✓</div>
+    <div class="flow-step-label">Connect GMC</div>
+  </div>
+  <div class="flow-arrow">›</div>
+  <div class="flow-step active">
+    <div class="flow-step-num">Step 2</div>
+    <div class="flow-dot active">2</div>
+    <div class="flow-step-label">Confirm Setup</div>
+  </div>
+  <div class="flow-arrow">›</div>
+  <div class="flow-step">
+    <div class="flow-step-num">Step 3</div>
+    <div class="flow-dot pending">3</div>
+    <div class="flow-step-label">Go Live</div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">
+    <span>⚡</span> We found the following from your Wix store
+  </div>
+  <div class="mockup-body">
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#a8d9bc"></div> Pulled from your store</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#93c5fd"></div> Smart default</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#f5cc6a"></div> Needs your input</div>
+    </div>
+
+    <!-- Brand -->
+    <div class="field-group">
+      <div class="field-label">
+        Brand Name
+        <span class="field-source source-auto">from your Wix business name</span>
+      </div>
+      <input class="field-input auto" value="Lake Erie Clothing Co." />
+      <div class="field-hint">Used on all products. Edit if your brand name differs from your business name.</div>
+    </div>
+
+    <!-- Site URL -->
+    <div class="field-group">
+      <div class="field-label">
+        Store URL
+        <span class="field-source source-auto">from your site settings</span>
+      </div>
+      <input class="field-input auto" value="https://www.lakeerieclothing.com" />
+      <div class="field-hint">Used to build product links for Google.</div>
+    </div>
+
+    <!-- Condition -->
+    <div class="field-group">
+      <div class="field-label">
+        Default Condition
+        <span class="field-source source-default">smart default</span>
+      </div>
+      <select class="field-input" style="border-color:#93c5fd;background:#eff6ff">
+        <option selected>New</option>
+        <option>Refurbished</option>
+        <option>Used</option>
+      </select>
+      <div class="field-hint">Most stores sell new products. Change if yours are refurbished or used.</div>
+    </div>
+
+    <hr class="divider" />
+
+    <!-- Read-only confirmations -->
+    <div class="readonly-row"><span class="readonly-key">Products found in your store</span><span class="readonly-val">18</span></div>
+    <div class="readonly-row"><span class="readonly-key">Store currency</span><span class="readonly-val">USD</span></div>
+    <div class="readonly-row"><span class="readonly-key">Syncing to</span><span class="readonly-val">Google Merchant Center</span></div>
+
+    <hr class="divider" />
+
+    <!-- Optional / skippable -->
+    <div class="optional-section">
+      <div class="optional-title">Optional — set later in Field Mapping</div>
+      <div class="optional-row">
+        <span class="optional-key">GTIN / Barcode</span>
+        <span class="skip-tag">skipping for now</span>
+      </div>
+      <div class="optional-row">
+        <span class="optional-key">Google Product Category</span>
+        <span class="skip-tag">skipping for now</span>
+      </div>
+      <div class="optional-row">
+        <span class="optional-key">MPN</span>
+        <span class="skip-tag">skipping for now</span>
+      </div>
+    </div>
+
+    <button class="btn-primary">Looks good — run first sync →</button>
+    <button class="btn-link">I'll review these in Field Mapping first</button>
+
+  </div>
+</div>
+
+<p class="subtitle" style="text-align:center;margin-top:14px">Does this feel right? Any fields that shouldn't be here, or anything missing?</p>
