@@ -12,7 +12,7 @@ import type {
   PaginatedSyncResult,
   SyncProgress,
 } from '../types/sync.types';
-import type { WixProduct, SyncState } from '../types/wix.types';
+import type { WixProduct, SyncState, ValidationError } from '../types/wix.types';
 import type { GmcProductInput } from '../types/gmc.types';
 import { flattenVariants, mapFlattenedToGmc } from './productMapper';
 import { validateGmc } from './validator';
@@ -201,6 +201,7 @@ async function syncProductChunk(
     const rules = await getRules(instanceId, 'gmc');
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
+    const productWarnings = new Map<string, ValidationError[]>();
 
     for (const item of flattened) {
       const productId = item.product._id ?? item.product.id;
@@ -221,16 +222,21 @@ async function syncProductChunk(
 
       // Apply rules then validate
       const transformed = applyRules([gmcProduct], rules, 'gmc');
-      const errors = validateGmc(transformed[0], transformed[0].offerId);
+      const allIssues = validateGmc(transformed[0], transformed[0].offerId);
+      const blockingErrors = allIssues.filter((e) => e.severity === 'error');
 
-      if (errors.length > 0) {
+      if (blockingErrors.length > 0) {
         validationFailures.push({
           productId: transformed[0].offerId,
           platform: 'gmc',
           success: false,
-          errors,
+          errors: allIssues, // store all issues (errors + warnings) in errorLog
         });
       } else {
+        // Warnings only — product is valid; store warnings for SyncState
+        if (allIssues.length > 0) {
+          productWarnings.set(transformed[0].offerId, allIssues);
+        }
         validProducts.push(transformed[0]);
       }
     }
@@ -248,11 +254,13 @@ async function syncProductChunk(
 
       for (const result of batchResults) {
         if (result.success) {
+          const warnings = productWarnings.get(result.offerId) ?? null;
           results.push({
             productId: result.offerId,
             platform: 'gmc',
             success: true,
             externalId: result.name,
+            errors: warnings ?? undefined,
           });
         } else {
           results.push({
@@ -366,6 +374,7 @@ export async function syncFromCache(
     const rules = await getRules(instanceId, 'gmc');
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
+    const productWarnings = new Map<string, ValidationError[]>();
 
     for (const item of flattened) {
       const productId = item.product._id ?? item.product.id;
@@ -383,16 +392,20 @@ export async function syncFromCache(
         }
       }
       const transformed = applyRules([gmcProduct], rules, 'gmc');
-      const errors = validateGmc(transformed[0], transformed[0].offerId);
+      const allIssues = validateGmc(transformed[0], transformed[0].offerId);
+      const blockingErrors = allIssues.filter((e) => e.severity === 'error');
 
-      if (errors.length > 0) {
+      if (blockingErrors.length > 0) {
         validationFailures.push({
           productId: transformed[0].offerId,
           platform: 'gmc',
           success: false,
-          errors,
+          errors: allIssues,
         });
       } else {
+        if (allIssues.length > 0) {
+          productWarnings.set(transformed[0].offerId, allIssues);
+        }
         validProducts.push(transformed[0]);
       }
     }
@@ -409,11 +422,13 @@ export async function syncFromCache(
 
       for (const result of batchResults) {
         if (result.success) {
+          const warnings = productWarnings.get(result.offerId) ?? null;
           results.push({
             productId: result.offerId,
             platform: 'gmc',
             success: true,
             externalId: result.name,
+            errors: warnings ?? undefined,
           });
         } else {
           results.push({
