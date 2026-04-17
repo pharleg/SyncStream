@@ -19,7 +19,6 @@ import { validateGmc } from './validator';
 import { batchInsertProducts } from './gmcClient';
 import { applyFilters } from './filterEngine';
 import { applyRules } from './rulesEngine';
-import { enhanceProducts } from './aiEnhancer';
 import {
   getValidGmcTokens,
 } from './oauthService';
@@ -32,6 +31,7 @@ import {
   upsertSyncProgress,
   getBatchProductPlatforms,
   getBatchGmcOverrides,
+  getBulkEnhancedContent,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -188,13 +188,15 @@ async function syncProductChunk(
     const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
     const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
 
-    // 4. AI enhance (if enabled)
-    let enhancedMap: Map<string, { title: string; description: string }> | undefined;
-    if (config.aiEnhancementEnabled) {
-      // Enhance at product level (not variant level) to avoid duplicate API calls
-      const uniqueProducts = [...new Map(platformFiltered.map((p) => [p._id ?? p.id, p])).values()];
-      enhancedMap = await enhanceProducts(uniqueProducts, instanceId, config.aiEnhancementStyle);
-    }
+    // 4. Load cached AI enhancements (generation happens in /api/enhance, not during sync)
+    const uniqueProductIds = [...new Set(platformFiltered.map((p) => p._id ?? p.id))];
+    const cachedEnhancements = await getBulkEnhancedContent(instanceId, uniqueProductIds);
+    const enhancedMap: Map<string, { title: string; description: string }> = new Map(
+      [...cachedEnhancements.entries()].map(([id, e]) => [
+        id,
+        { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
+      ]),
+    );
 
     // 5. Map to GMC format + 6. Apply rules
     const rules = await getRules(instanceId, 'gmc');
@@ -364,11 +366,15 @@ export async function syncFromCache(
     const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
     const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
 
-    let enhancedMap: Map<string, { title: string; description: string }> | undefined;
-    if (config.aiEnhancementEnabled) {
-      const uniqueProducts = [...new Map(filtered.map((p) => [p._id ?? p.id, p])).values()];
-      enhancedMap = await enhanceProducts(uniqueProducts, instanceId, config.aiEnhancementStyle);
-    }
+    // Load cached AI enhancements (generation happens in /api/enhance, not during sync)
+    const uniqueProductIds = [...new Set(filtered.map((p) => p._id ?? p.id))];
+    const cachedEnhancements = await getBulkEnhancedContent(instanceId, uniqueProductIds);
+    const enhancedMap: Map<string, { title: string; description: string }> = new Map(
+      [...cachedEnhancements.entries()].map(([id, e]) => [
+        id,
+        { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
+      ]),
+    );
 
     const rules = await getRules(instanceId, 'gmc');
     const validProducts: GmcProductInput[] = [];
