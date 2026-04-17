@@ -487,6 +487,103 @@ export async function updateCachedProductFields(
   if (error) throw new Error(`Failed to update cached product: ${error.message}`);
 }
 
+// ---------------------------------------------------------------------------
+// Sync Context (combined RPC — replaces 6 individual DB calls per sync chunk)
+// ---------------------------------------------------------------------------
+
+export interface SyncContextResult {
+  config: AppConfig | null;
+  filters: SyncFilter[];
+  rules: SyncRule[];
+  platformMap: Map<string, ('gmc' | 'meta')[] | null>;
+  overridesMap: Map<string, Map<string, string>>;
+  enhancedMap: Map<string, EnhancedContent>;
+}
+
+/**
+ * Fetch all per-chunk sync context in a single RPC call.
+ * Replaces individual calls to getAppConfig, getFilters, getRules,
+ * getBatchProductPlatforms, getBatchGmcOverrides, and getBulkEnhancedContent.
+ * Reduces 6 subrequests → 1 subrequest per sync chunk.
+ */
+export async function getSyncContext(
+  instanceId: string,
+  productIds: string[],
+  platform: Platform,
+): Promise<SyncContextResult> {
+  const db = await getClient();
+  const { data, error } = await db.rpc('get_sync_context', {
+    p_instance_id: instanceId,
+    p_product_ids: productIds,
+    p_platform: platform,
+  });
+
+  if (error) throw new Error(`Failed to get sync context: ${error.message}`);
+
+  const raw = data as any;
+
+  // Parse config
+  let config: AppConfig | null = null;
+  if (raw.config) {
+    const c = raw.config;
+    config = {
+      instanceId: c.instance_id,
+      gmcConnected: c.gmc_connected ?? false,
+      metaConnected: c.meta_connected ?? false,
+      fieldMappings: typeof c.field_mappings === 'string'
+        ? JSON.parse(c.field_mappings)
+        : c.field_mappings ?? {},
+      syncEnabled: c.sync_enabled ?? false,
+      lastFullSync: c.last_full_sync ? new Date(c.last_full_sync) : null,
+      gmcDataSourceId: c.gmc_data_source_id ?? undefined,
+      aiEnhancementEnabled: c.ai_enhancement_enabled ?? false,
+      aiEnhancementStyle: c.ai_enhancement_style ?? undefined,
+      setupScreenShown: c.setup_screen_shown ?? false,
+    };
+  }
+
+  // Parse filters
+  const filters: SyncFilter[] = (raw.filters ?? []).map((f: any) => ({
+    id: f.id, instanceId: f.instance_id, name: f.name,
+    platform: f.platform, field: f.field, operator: f.operator,
+    value: f.value, conditionGroup: f.condition_group,
+    order: f.order, enabled: f.enabled,
+  }));
+
+  // Parse rules
+  const rules: SyncRule[] = (raw.rules ?? []).map((r: any) => ({
+    id: r.id, instanceId: r.instance_id, name: r.name,
+    platform: r.platform, field: r.field, type: r.type,
+    expression: r.expression, order: r.order, enabled: r.enabled,
+  }));
+
+  // Parse platformMap
+  const platformMap = new Map<string, ('gmc' | 'meta')[] | null>();
+  for (const ps of (raw.platformSettings ?? [])) {
+    platformMap.set(ps.productId, ps.platforms ?? null);
+  }
+
+  // Parse overridesMap
+  const overridesMap = new Map<string, Map<string, string>>();
+  for (const o of (raw.overrides ?? [])) {
+    if (!overridesMap.has(o.productId)) overridesMap.set(o.productId, new Map());
+    overridesMap.get(o.productId)!.set(o.field, o.value);
+  }
+
+  // Parse enhancedMap
+  const enhancedMap = new Map<string, EnhancedContent>();
+  for (const e of (raw.enhancements ?? [])) {
+    enhancedMap.set(e.product_id, {
+      id: e.id, instanceId: e.instance_id, productId: e.product_id,
+      platform: e.platform, enhancedTitle: e.enhanced_title ?? undefined,
+      enhancedDescription: e.enhanced_description, sourceHash: e.source_hash,
+      generatedAt: e.generated_at,
+    });
+  }
+
+  return { config, filters, rules, platformMap, overridesMap, enhancedMap };
+}
+
 // ── Sync Progress CRUD ──
 
 export async function upsertSyncProgress(progress: SyncProgress): Promise<void> {

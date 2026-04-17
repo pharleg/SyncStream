@@ -23,16 +23,11 @@ import {
   getValidGmcTokens,
 } from './oauthService';
 import {
-  getAppConfig,
   bulkUpsertSyncStates,
-  getRules,
-  getFilters,
   getCachedProducts,
   getCachedProductsByIds,
   upsertSyncProgress,
-  getBatchProductPlatforms,
-  getBatchGmcOverrides,
-  getBulkEnhancedContent,
+  getSyncContext,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -151,18 +146,29 @@ async function syncProductChunk(
   products: WixProduct[],
   platforms: SyncOptions['platforms'],
 ): Promise<BatchSyncResult> {
-  const config = await getAppConfig(instanceId);
+  const allProductIds = products.map((p) => p._id ?? p.id);
+
+  // Single RPC call replaces: getAppConfig + getFilters + getRules +
+  // getBatchProductPlatforms + getBatchGmcOverrides + getBulkEnhancedContent
+  const ctx = await getSyncContext(instanceId, allProductIds, 'gmc');
+  const { config, filters, rules, platformMap, overridesMap, enhancedMap: rawEnhancedMap } = ctx;
+
   if (!config) {
     throw new Error('App not configured. Please complete setup first.');
   }
+
+  const enhancedMap: Map<string, { title: string; description: string }> = new Map(
+    [...rawEnhancedMap.entries()].map(([id, e]) => [
+      id,
+      { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
+    ]),
+  );
 
   const results: SyncResult[] = [];
 
   if (platforms.includes('gmc')) {
     if (!config.gmcConnected) {
-      throw new Error(
-        'GMC not connected. Please connect your account first.',
-      );
+      throw new Error('GMC not connected. Please connect your account first.');
     }
 
     const tokens = await getValidGmcTokens(instanceId);
@@ -170,12 +176,9 @@ async function syncProductChunk(
     const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
 
     // 2. Apply filters
-    const filters = await getFilters(instanceId, 'gmc');
     const filtered = applyFilters(products, filters, 'gmc');
 
     // 2b. Per-product platform targeting — skip products not targeting GMC
-    const productIds = filtered.map((p) => p._id ?? p.id);
-    const platformMap = await getBatchProductPlatforms(productIds);
     const platformFiltered = filtered.filter((p) => {
       const id = p._id ?? p.id;
       const targets = platformMap.get(id);
@@ -185,34 +188,19 @@ async function syncProductChunk(
     // 3. Flatten variants
     const flattened = platformFiltered.flatMap((p) => flattenVariants(p));
 
-    // Fetch any merchant-applied GMC field overrides for this batch
-    const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
-    const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
-
-    // 4. Load cached AI enhancements (generation happens in /api/enhance, not during sync)
-    const uniqueProductIds = [...new Set(platformFiltered.map((p) => p._id ?? p.id))];
-    const cachedEnhancements = await getBulkEnhancedContent(instanceId, uniqueProductIds);
-    const enhancedMap: Map<string, { title: string; description: string }> = new Map(
-      [...cachedEnhancements.entries()].map(([id, e]) => [
-        id,
-        { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
-      ]),
-    );
-
-    // 5. Map to GMC format + 6. Apply rules
-    const rules = await getRules(instanceId, 'gmc');
+    // 4-5. Map to GMC format + apply rules + apply overrides + validate
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
     const productWarnings = new Map<string, ValidationError[]>();
 
     for (const item of flattened) {
       const productId = item.product._id ?? item.product.id;
-      const enhanced = enhancedMap?.get(productId);
+      const enhanced = enhancedMap.get(productId);
 
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
 
       // Apply any stored merchant overrides for this product
-      const overrides = gmcOverridesMap.get(productId);
+      const overrides = overridesMap.get(productId);
       if (overrides && overrides.size > 0) {
         for (const [field, value] of overrides) {
           if (field === 'brand') gmcProduct.productAttributes.brand = value;
@@ -222,7 +210,6 @@ async function syncProductChunk(
         }
       }
 
-      // Apply rules then validate
       const transformed = applyRules([gmcProduct], rules, 'gmc');
       const allIssues = validateGmc(transformed[0], transformed[0].offerId);
       const blockingErrors = allIssues.filter((e) => e.severity === 'error');
@@ -232,10 +219,9 @@ async function syncProductChunk(
           productId: transformed[0].offerId,
           platform: 'gmc',
           success: false,
-          errors: allIssues, // store all issues (errors + warnings) in errorLog
+          errors: allIssues,
         });
       } else {
-        // Warnings only — product is valid; store warnings for SyncState
         if (allIssues.length > 0) {
           productWarnings.set(transformed[0].offerId, allIssues);
         }
@@ -245,7 +231,7 @@ async function syncProductChunk(
 
     results.push(...validationFailures);
 
-    // 7. Push valid products
+    // 6. Push valid products to GMC
     if (validProducts.length > 0) {
       const batchResults = await batchInsertProducts(
         tokens.merchantId,
@@ -282,7 +268,7 @@ async function syncProductChunk(
     }
   }
 
-  // 8. Write SyncState records
+  // 7. Write SyncState records
   const syncStates: SyncState[] = results.map((r) => ({
     productId: r.productId,
     platform: r.platform,
@@ -335,11 +321,6 @@ export async function syncFromCache(
   productIds: string[],
   platforms: SyncOptions['platforms'],
 ): Promise<BatchSyncResult> {
-  const config = await getAppConfig(instanceId);
-  if (!config) {
-    throw new Error('App not configured. Please complete setup first.');
-  }
-
   const cachedProducts = await getCachedProductsByIds(instanceId, productIds);
   if (cachedProducts.length === 0) {
     return { total: 0, synced: 0, failed: 0, results: [] };
@@ -347,6 +328,21 @@ export async function syncFromCache(
 
   // Reconstruct WixProduct objects from cached product_data JSON
   const products: WixProduct[] = cachedProducts.map((cp) => cp.productData as WixProduct);
+
+  const allProductIds = products.map((p) => p._id ?? p.id);
+  const ctx = await getSyncContext(instanceId, allProductIds, 'gmc');
+  const { config, filters, rules, overridesMap, enhancedMap: rawEnhancedMap } = ctx;
+
+  if (!config) {
+    throw new Error('App not configured. Please complete setup first.');
+  }
+
+  const enhancedMap: Map<string, { title: string; description: string }> = new Map(
+    [...rawEnhancedMap.entries()].map(([id, e]) => [
+      id,
+      { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
+    ]),
+  );
 
   const results: SyncResult[] = [];
 
@@ -359,36 +355,19 @@ export async function syncFromCache(
     const accessToken = tokens.accessToken;
     const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
 
-    const filters = await getFilters(instanceId, 'gmc');
     const filtered = applyFilters(products, filters, 'gmc');
     const flattened = filtered.flatMap((p) => flattenVariants(p));
 
-    // Fetch any merchant-applied GMC field overrides for this batch
-    const flatProductIds = [...new Set(flattened.map((f) => f.product._id ?? f.product.id))];
-    const gmcOverridesMap = await getBatchGmcOverrides(flatProductIds);
-
-    // Load cached AI enhancements (generation happens in /api/enhance, not during sync)
-    const uniqueProductIds = [...new Set(filtered.map((p) => p._id ?? p.id))];
-    const cachedEnhancements = await getBulkEnhancedContent(instanceId, uniqueProductIds);
-    const enhancedMap: Map<string, { title: string; description: string }> = new Map(
-      [...cachedEnhancements.entries()].map(([id, e]) => [
-        id,
-        { title: e.enhancedTitle ?? '', description: e.enhancedDescription },
-      ]),
-    );
-
-    const rules = await getRules(instanceId, 'gmc');
     const validProducts: GmcProductInput[] = [];
     const validationFailures: SyncResult[] = [];
     const productWarnings = new Map<string, ValidationError[]>();
 
     for (const item of flattened) {
       const productId = item.product._id ?? item.product.id;
-      const enhanced = enhancedMap?.get(productId);
+      const enhanced = enhancedMap.get(productId);
       const gmcProduct = mapFlattenedToGmc(item, config.fieldMappings, siteUrl, enhanced);
 
-      // Apply any stored merchant overrides for this product
-      const overrides = gmcOverridesMap.get(productId);
+      const overrides = overridesMap.get(productId);
       if (overrides && overrides.size > 0) {
         for (const [field, value] of overrides) {
           if (field === 'brand') gmcProduct.productAttributes.brand = value;
@@ -496,8 +475,6 @@ export async function runPaginatedSync(
   };
 
   const tryProgress = (p: SyncProgress) => upsertSyncProgress(p).catch(() => {});
-
-  await tryProgress(progress);
 
   try {
     // Use cached products from Supabase — avoids N Wix SDK subrequests per product.
