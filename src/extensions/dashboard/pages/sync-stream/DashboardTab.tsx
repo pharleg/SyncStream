@@ -40,12 +40,12 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)} days ago`;
 }
 
-function severityDotColor(severity: string): string {
+function severityDotColor(severity: SyncEvent['severity']): string {
   switch (severity) {
     case 'success': return '#3db37a';
     case 'error': return '#e53935';
     case 'warning': return '#f5a623';
-    default: return '#116dff';
+    case 'info': return '#116dff';
   }
 }
 
@@ -60,22 +60,24 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
   onNavigateToFailed,
 }) => {
   // Merge gmc + meta top issues, deduplicate by field+message, take top 6
-  const allTopIssues = [...topIssues.gmc, ...topIssues.meta]
-    .reduce<TopIssue[]>((acc, issue) => {
+  const allTopIssues = (() => {
+    const map = new Map<string, TopIssue>();
+    for (const issue of [...topIssues.gmc, ...topIssues.meta]) {
       const key = `${issue.field}||${issue.message}`;
-      const existing = acc.find((i) => `${i.field}||${i.message}` === key);
+      const existing = map.get(key);
       if (existing) {
-        existing.count = Math.max(existing.count, issue.count);
+        map.set(key, { ...existing, count: Math.max(existing.count, issue.count) });
       } else {
-        acc.push({ ...issue });
+        map.set(key, { ...issue });
       }
-      return acc;
-    }, [])
-    .sort((a, b) => {
-      if (a.severity !== b.severity) return a.severity === 'error' ? -1 : 1;
-      return b.count - a.count;
-    })
-    .slice(0, 6);
+    }
+    return Array.from(map.values())
+      .sort((a, b) => {
+        if (a.severity !== b.severity) return a.severity === 'error' ? -1 : 1;
+        return b.count - a.count;
+      })
+      .slice(0, 6);
+  })();
 
   return (
     <Box direction="vertical" gap="16px">
@@ -174,9 +176,9 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
               <Text size="small" secondary>No activity yet.</Text>
             ) : (
               <Box direction="vertical" gap="0">
-                {recentEvents.map((event) => (
+                {recentEvents.map((event, i) => (
                   <Box
-                    key={event.id ?? event.createdAt}
+                    key={event.id ?? event.createdAt ?? i}
                     gap="8px"
                     verticalAlign="middle"
                     style={{ padding: '7px 0', borderBottom: '1px solid #f7f9fb' }}
