@@ -36,6 +36,35 @@ function truncate(str: string, maxLen: number): string {
   return str.length > maxLen ? str.slice(0, maxLen) : str;
 }
 
+/**
+ * Strip hyphens from a UUID and return at most `maxLen` chars.
+ * UUID without hyphens = 32 hex chars, well under GMC's 50-char offerId limit.
+ */
+function shortId(id: string, maxLen = 32): string {
+  return id.replace(/-/g, '').slice(0, maxLen);
+}
+
+/**
+ * Build a GMC-safe offerId (max 50 chars).
+ * - If the product has a SKU, use it (truncated to 50).
+ * - Multi-variant fallback: first 24 hex chars of parentId + '_' + first 24 of variantId = 49 chars.
+ * - Single-variant fallback: 32 hex chars of the product ID.
+ */
+function buildOfferId(sku: string | undefined, parentId: string, variantId: string, isMultiVariant: boolean): string {
+  if (sku) return truncate(sku, 50);
+  if (isMultiVariant) return `${shortId(parentId, 24)}_${shortId(variantId, 24)}`;
+  return shortId(parentId);
+}
+
+/**
+ * Build a GMC-safe MPN (max 70 chars) from Wix product/variant IDs.
+ * Same format as buildOfferId but with the full 32-char hex IDs where possible.
+ */
+function buildAutoMpn(parentId: string, variantId: string, isMultiVariant: boolean): string {
+  if (isMultiVariant) return `${shortId(parentId, 32)}_${shortId(variantId, 32)}`;
+  return shortId(parentId);
+}
+
 /** Convert a decimal price string or number to amountMicros string. */
 function toAmountMicros(amount: string | number): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
@@ -257,12 +286,7 @@ export function mapFlattenedToGmc(
   ) ?? 'NEW';
   const gtin = resolveMappedField(product, 'gtin', mappings);
   const mpnMapped = resolveMappedField(product, 'mpn', mappings);
-  // Auto-generate a stable MPN from Wix product/variant IDs when none is mapped.
-  // parentId_variantId for multi-variant rows, parentId for single-variant.
-  const mpnGenerated = item.isMultiVariant
-    ? `${item.parentId}_${item.itemId}`
-    : item.parentId;
-  const mpn = mpnMapped ?? mpnGenerated;
+  const mpn = mpnMapped ?? buildAutoMpn(item.parentId, item.itemId, item.isMultiVariant);
   const googleProductCategory = resolveMappedField(product, 'googleProductCategory', mappings);
   const additionalImageLinks = getAdditionalImageLinks(product);
   const price = extractPrice(product, variant);
@@ -307,12 +331,8 @@ export function mapFlattenedToGmc(
   if (googleProductCategory) productAttributes.googleProductCategory = googleProductCategory;
   if (additionalImageLinks.length > 0) productAttributes.additionalImageLinks = additionalImageLinks;
 
-  // SKU-first ID: use SKU if present, otherwise fallback to parentId_variantId
-  const offerId = item.sku
-    ? item.sku
-    : item.isMultiVariant
-      ? `${item.parentId}_${item.itemId}`
-      : item.itemId;
+  // GMC offerId: SKU if set, else compact hex IDs (max 50 chars)
+  const offerId = buildOfferId(item.sku, item.parentId, item.itemId, item.isMultiVariant);
 
   return {
     offerId,
@@ -377,12 +397,12 @@ export function mapToGmc(
     };
 
     const productId = product._id ?? product.id;
-    const variantId = variant?._id ?? variant?.id;
-    const autoMpn = variantId && variantId !== productId ? `${productId}_${variantId}` : productId;
+    const variantId = variant?._id ?? variant?.id ?? productId;
+    const isMultiV = false;
     if (gtin) {
       productAttributes.gtins = [gtin];
     } else {
-      productAttributes.mpn = mpn ?? autoMpn;
+      productAttributes.mpn = mpn ?? buildAutoMpn(productId, variantId, isMultiV);
       if (!brand) productAttributes.identifierExists = false;
     }
     if (googleProductCategory)
@@ -392,7 +412,7 @@ export function mapToGmc(
 
     return [
       {
-        offerId: variant?._id ?? variant?.id ?? product._id ?? product.id,
+        offerId: buildOfferId(undefined, productId, variantId, isMultiV),
         contentLanguage: 'en',
         feedLabel: 'US',
         productAttributes,
@@ -422,11 +442,10 @@ export function mapToGmc(
     if (size) productAttributes.size = size;
     const parentId = product._id ?? product.id;
     const vId = variant._id ?? variant.id;
-    const autoMpnV = `${parentId}_${vId}`;
     if (gtin) {
       productAttributes.gtins = [gtin];
     } else {
-      productAttributes.mpn = mpn ?? autoMpnV;
+      productAttributes.mpn = mpn ?? buildAutoMpn(parentId, vId, true);
       if (!brand) productAttributes.identifierExists = false;
     }
     if (googleProductCategory)
@@ -435,7 +454,7 @@ export function mapToGmc(
       productAttributes.additionalImageLinks = additionalImageLinks;
 
     return {
-      offerId: variant._id ?? variant.id,
+      offerId: buildOfferId(undefined, parentId, vId, true),
       contentLanguage: 'en',
       feedLabel: 'US',
       productAttributes,

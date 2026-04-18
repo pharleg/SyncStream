@@ -73,15 +73,15 @@ export function validateGmc(
   const offerErr = requiredString(product.offerId, 'offerId', productId);
   if (offerErr) errors.push(offerErr);
 
-  // SKU warning: fallback IDs (UUIDs or underscore-joined) suggest no SKU was set
+  // SKU warning: hex-only fallback IDs suggest no merchant SKU was set.
+  // Fallback format: 32 hex chars (single) or 24hex_24hex (multi-variant).
   if (product.offerId) {
-    // Match UUID patterns (with optional _variantId suffix) — not merchant SKUs with underscores
-    const looksLikeFallback = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(_[0-9a-f-]+)?$/i.test(product.offerId);
+    const looksLikeFallback = /^[0-9a-f]{24,32}(_[0-9a-f]{24,32})?$/i.test(product.offerId);
     if (looksLikeFallback) {
       errors.push({
         field: 'offerId',
         platform: 'gmc',
-        message: 'No SKU set — using generated fallback ID. Set a SKU on this product/variant for stable GMC tracking.',
+        message: 'No SKU set — using generated fallback ID. Add a SKU to this product/variant for cleaner GMC tracking.',
         productId,
         severity: 'warning',
       });
