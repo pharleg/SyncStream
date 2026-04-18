@@ -274,15 +274,34 @@ async function syncProductChunk(
     }
   }
 
-  // 7. Write SyncState records
-  const syncStates: SyncState[] = results.map((r) => ({
-    productId: r.productId,
-    platform: r.platform,
-    status: r.success ? 'synced' as const : 'error' as const,
-    lastSynced: new Date(),
-    errorLog: r.errors ?? null,
-    externalId: r.externalId ?? '',
-  }));
+  // 7. Write SyncState records (deduplicate by productId+platform — multi-variant
+  //    products produce one SyncResult per variant but one SyncState per product)
+  const stateMap = new Map<string, SyncState>();
+  for (const r of results) {
+    const key = `${r.productId}:${r.platform}`;
+    const existing = stateMap.get(key);
+    if (!existing) {
+      stateMap.set(key, {
+        productId: r.productId,
+        platform: r.platform,
+        status: r.success ? 'synced' as const : 'error' as const,
+        lastSynced: new Date(),
+        errorLog: r.errors ?? null,
+        externalId: r.externalId ?? '',
+      });
+    } else {
+      // Any variant failure = product failure; merge error logs
+      const mergedStatus = (!r.success || existing.status === 'error') ? 'error' as const : 'synced' as const;
+      const parts = [existing.errorLog, r.errors ?? null].filter((e): e is NonNullable<typeof e> => e != null);
+      const mergedLog = parts.flatMap((e) => (Array.isArray(e) ? e : [e]));
+      stateMap.set(key, {
+        ...existing,
+        status: mergedStatus,
+        errorLog: mergedLog.length > 0 ? mergedLog : null,
+      });
+    }
+  }
+  const syncStates: SyncState[] = Array.from(stateMap.values());
 
   await bulkUpsertSyncStates(syncStates);
 
@@ -442,14 +461,31 @@ export async function syncFromCache(
     }
   }
 
-  const syncStates: SyncState[] = results.map((r) => ({
-    productId: r.productId,
-    platform: r.platform,
-    status: r.success ? 'synced' as const : 'error' as const,
-    lastSynced: new Date(),
-    errorLog: r.errors ?? null,
-    externalId: r.externalId ?? '',
-  }));
+  const stateMap2 = new Map<string, SyncState>();
+  for (const r of results) {
+    const key = `${r.productId}:${r.platform}`;
+    const existing = stateMap2.get(key);
+    if (!existing) {
+      stateMap2.set(key, {
+        productId: r.productId,
+        platform: r.platform,
+        status: r.success ? 'synced' as const : 'error' as const,
+        lastSynced: new Date(),
+        errorLog: r.errors ?? null,
+        externalId: r.externalId ?? '',
+      });
+    } else {
+      const mergedStatus = (!r.success || existing.status === 'error') ? 'error' as const : 'synced' as const;
+      const parts2 = [existing.errorLog, r.errors ?? null].filter((e): e is NonNullable<typeof e> => e != null);
+      const mergedLog = parts2.flatMap((e) => (Array.isArray(e) ? e : [e]));
+      stateMap2.set(key, {
+        ...existing,
+        status: mergedStatus,
+        errorLog: mergedLog.length > 0 ? mergedLog : null,
+      });
+    }
+  }
+  const syncStates: SyncState[] = Array.from(stateMap2.values());
 
   await bulkUpsertSyncStates(syncStates);
 
