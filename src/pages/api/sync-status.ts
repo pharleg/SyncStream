@@ -35,7 +35,7 @@ export const GET: APIRoute = async ({ request }) => {
       const hasErrors = log.some((e: any) => e.severity === 'error' || !e.severity) && s.status === 'error';
       const hasWarnings = log.some((e: any) => e.severity === 'warning') && s.status !== 'error';
       const nextStatus: 'synced' | 'error' | 'warning' | 'pending' =
-        hasErrors ? 'error' : hasWarnings ? 'warning' : (s.status as any);
+        hasErrors ? 'error' : hasWarnings ? 'warning' : (s.status as 'synced' | 'error' | 'pending');
       // error > warning > synced > pending
       if (!current || current === 'pending' ||
           (current === 'synced' && nextStatus !== 'pending') ||
@@ -44,10 +44,11 @@ export const GET: APIRoute = async ({ request }) => {
       }
     }
 
-    const totalSynced = states.filter((s) => s.status === 'synced').length;
-    const totalErrors = states.filter((s) => s.status === 'error').length;
-    const totalPending = states.filter((s) => s.status === 'pending').length;
-    const totalWarnings = Array.from(productStatuses.values()).filter((v) => v === 'warning').length;
+    const allStatuses = Array.from(productStatuses.values());
+    const totalSynced = allStatuses.filter((v) => v === 'synced').length;
+    const totalErrors = allStatuses.filter((v) => v === 'error').length;
+    const totalPending = allStatuses.filter((v) => v === 'pending').length;
+    const totalWarnings = allStatuses.filter((v) => v === 'warning').length;
 
     // Per-platform health
     const gmcStates = states.filter((s) => s.platform === 'gmc');
