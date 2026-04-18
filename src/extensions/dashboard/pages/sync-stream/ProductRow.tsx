@@ -164,7 +164,7 @@ const ExpandedPanel: FC<{
             <img
               src={product.imageUrl}
               alt={product.name}
-              style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, marginTop: 4 }}
+              style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, marginTop: 4, display: 'block' }}
             />
           </Box>
         )}
@@ -226,7 +226,7 @@ export const ProductRow: FC<ProductRowProps> = ({
         {/* Thumbnail */}
         <Box align="center" verticalAlign="middle" style={{ width: 32, height: 32, borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: '#e8edf0' }}>
           {product.imageUrl ? (
-            <img src={product.imageUrl} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            <img src={product.imageUrl} alt={product.name} style={{ width: 32, height: 32, objectFit: 'cover', display: 'block' }} />
           ) : (
             <Text size="tiny" secondary>—</Text>
           )}
