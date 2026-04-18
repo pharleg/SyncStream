@@ -863,6 +863,7 @@ export async function getTopIssues(
   const { data, error } = await db
     .from('sync_state')
     .select('error_log')
+    // TODO: add .eq('instance_id', _instanceId) once sync_state schema gains an instance_id column
     .eq('platform', platform);
   if (error) throw new Error(`Failed to fetch sync states for top issues: ${error.message}`);
 
