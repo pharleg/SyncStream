@@ -800,3 +800,96 @@ export async function getBatchGmcOverrides(
   }
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// Sync Events (recent activity feed)
+// ---------------------------------------------------------------------------
+
+export interface SyncEvent {
+  id?: string;
+  instanceId: string;
+  eventType: 'sync_complete' | 'sync_error' | 'compliance_check' | 'manual_fix';
+  message: string;
+  severity: 'success' | 'error' | 'info' | 'warning';
+  productCount?: number;
+  createdAt?: string;
+}
+
+export async function upsertSyncEvent(event: Omit<SyncEvent, 'id' | 'createdAt'>): Promise<void> {
+  const db = await getClient();
+  const { error } = await db.from('sync_events').insert({
+    instance_id: event.instanceId,
+    event_type: event.eventType,
+    message: event.message,
+    severity: event.severity,
+    product_count: event.productCount ?? null,
+  });
+  if (error) throw new Error(`Failed to insert sync event: ${error.message}`);
+}
+
+export async function getRecentEvents(instanceId: string, limit = 10): Promise<SyncEvent[]> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('sync_events')
+    .select('*')
+    .eq('instance_id', instanceId)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`Failed to fetch sync events: ${error.message}`);
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    instanceId: row.instance_id,
+    eventType: row.event_type,
+    message: row.message,
+    severity: row.severity,
+    productCount: row.product_count ?? undefined,
+    createdAt: row.created_at,
+  }));
+}
+
+export interface TopIssue {
+  field: string;
+  message: string;
+  severity: 'error' | 'warning';
+  count: number;
+}
+
+export async function getTopIssues(
+  _instanceId: string,
+  platform: 'gmc' | 'meta',
+  limit = 6,
+): Promise<TopIssue[]> {
+  const db = await getClient();
+  const { data, error } = await db
+    .from('sync_state')
+    .select('error_log')
+    .eq('platform', platform);
+  if (error) throw new Error(`Failed to fetch sync states for top issues: ${error.message}`);
+
+  const counts = new Map<string, { message: string; severity: 'error' | 'warning'; count: number }>();
+  for (const row of data ?? []) {
+    const log = Array.isArray(row.error_log) ? row.error_log : [];
+    for (const entry of log) {
+      if (!entry.field || !entry.message) continue;
+      const key = `${entry.field}||${entry.message}`;
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count++;
+      } else {
+        counts.set(key, {
+          message: entry.message,
+          severity: entry.severity === 'warning' ? 'warning' : 'error',
+          count: 1,
+        });
+      }
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([key, val]) => ({ field: key.split('||')[0], ...val }))
+    .sort((a, b) => {
+      if (a.severity !== b.severity) return a.severity === 'error' ? -1 : 1;
+      return b.count - a.count;
+    })
+    .slice(0, limit);
+}
