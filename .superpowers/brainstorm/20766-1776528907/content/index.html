@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SyncStream — Detailed Design</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #32536a; }
+
+  .page-header {
+    background: white;
+    border-bottom: 1px solid #dfe5eb;
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .page-header h1 { font-size: 18px; font-weight: 600; color: #32536a; }
+  .badge { background: #116dff; color: white; font-size: 11px; padding: 2px 8px; border-radius: 100px; font-weight: 600; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 24px; }
+
+  .section-label {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #7a92a5;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #116dff;
+    display: inline-block;
+  }
+
+  .section-wrap { margin-bottom: 48px; }
+
+  /* ---- MOCKUP SHELL ---- */
+  .mockup {
+    background: white;
+    border: 1px solid #dfe5eb;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+    max-width: 820px;
+  }
+  .mockup-topbar {
+    background: #1a1f36;
+    color: white;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .mockup-topbar .logo { color: #6ee7e7; font-weight: 700; letter-spacing: 0.04em; }
+  .mockup-topbar .site { color: #8a8fa8; font-size: 11px; margin-left: auto; }
+
+  .mockup-tabs {
+    display: flex;
+    border-bottom: 1px solid #dfe5eb;
+    background: white;
+    padding: 0 16px;
+  }
+  .mockup-tab {
+    padding: 10px 14px;
+    font-size: 12px;
+    color: #7a92a5;
+    border-bottom: 2px solid transparent;
+    cursor: default;
+    white-space: nowrap;
+  }
+  .mockup-tab.active { color: #116dff; border-bottom-color: #116dff; font-weight: 600; }
+
+  .mockup-body { padding: 20px; background: #f7f9fb; }
+
+  /* ---- DASHBOARD: STAT CARDS ---- */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  .stat-card {
+    background: white;
+    border: 1px solid #e8edf0;
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .stat-card-num { font-size: 22px; font-weight: 700; line-height: 1; }
+  .stat-card-label { font-size: 11px; color: #7a92a5; margin-top: 4px; }
+  .stat-card-sub { font-size: 10px; color: #b0bec5; margin-top: 2px; }
+  .num-total { color: #32536a; }
+  .num-synced { color: #3db37a; }
+  .num-failed { color: #e53935; }
+  .num-warn { color: #f5a623; }
+
+  /* ---- FEED HEALTH ---- */
+  .health-card {
+    background: white;
+    border: 1px solid #e8edf0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .health-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+  .health-card-title { font-size: 13px; font-weight: 600; }
+  .health-link { font-size: 11px; color: #116dff; }
+
+  .platform-health { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ph-item {}
+  .ph-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .ph-name { font-size: 12px; font-weight: 600; color: #32536a; }
+  .ph-pct { font-size: 14px; font-weight: 700; }
+  .ph-bar { height: 8px; background: #e8edf0; border-radius: 4px; overflow: hidden; }
+  .ph-fill { height: 100%; border-radius: 4px; }
+  .ph-meta { font-size: 10px; color: #7a92a5; margin-top: 4px; }
+
+  /* ---- ACTIONS ROW ---- */
+  .actions-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  .btn { padding: 8px 16px; border-radius: 6px; font-size: 12px; font-weight: 600; border: 1px solid; cursor: default; white-space: nowrap; }
+  .btn-primary { background: #116dff; color: white; border-color: #116dff; }
+  .btn-secondary { background: white; color: #116dff; border-color: #c5d8ff; }
+  .btn-warn { background: #fff8e1; color: #c17d00; border-color: #f5d67a; }
+  .btn-icon { margin-right: 4px; }
+
+  /* ---- ACTIVITY ---- */
+  .activity-card {
+    background: white;
+    border: 1px solid #e8edf0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .activity-header { padding: 10px 14px; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #7a92a5; letter-spacing: 0.06em; border-bottom: 1px solid #f0f2f5; }
+  .activity-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 11px;
+    border-bottom: 1px solid #f7f9fb;
+  }
+  .activity-row:last-child { border-bottom: none; }
+  .activity-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .activity-msg { flex: 1; color: #32536a; }
+  .activity-time { color: #b0bec5; font-size: 10px; }
+
+  /* ---- TWO-COL LAYOUT ---- */
+  .two-col { display: grid; grid-template-columns: 1fr 280px; gap: 12px; margin-top: 12px; }
+
+  /* ---- ISSUES PANEL ---- */
+  .issues-panel {
+    background: white;
+    border: 1px solid #e8edf0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .issues-header {
+    padding: 10px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #7a92a5;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid #f0f2f5;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .issues-count { background: #e53935; color: white; font-size: 10px; padding: 1px 6px; border-radius: 100px; }
+  .issue-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    font-size: 11px;
+    border-bottom: 1px solid #f7f9fb;
+  }
+  .issue-row:last-child { border-bottom: none; }
+  .issue-name { color: #32536a; }
+  .issue-tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+  .tag-error { background: #fce8e8; color: #c62828; }
+  .tag-warn { background: #fff8e1; color: #c17d00; }
+
+  /* ========================================
+     PRODUCTS TAB
+  ======================================== */
+  .products-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+  .filter-tabs { display: flex; gap: 4px; }
+  .filter-tab {
+    padding: 6px 12px;
+    border-radius: 100px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid;
+    cursor: default;
+  }
+  .filter-tab.all { background: #32536a; color: white; border-color: #32536a; }
+  .filter-tab.failed { background: #fce8e8; color: #c62828; border-color: #f5c6c6; }
+  .filter-tab.warn { background: #fff8e1; color: #c17d00; border-color: #f5d67a; }
+  .filter-tab.ok { background: #e8f5ee; color: #2e7d32; border-color: #a5d6b0; }
+
+  .search-box {
+    flex: 1;
+    background: white;
+    border: 1px solid #dfe5eb;
+    border-radius: 6px;
+    padding: 7px 12px;
+    font-size: 11px;
+    color: #b0bec5;
+    min-width: 160px;
+  }
+
+  /* Product table */
+  .product-table {
+    background: white;
+    border: 1px solid #e8edf0;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .product-table-header {
+    display: grid;
+    grid-template-columns: 36px 1fr 72px 72px 80px 36px;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #7a92a5;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid #e8edf0;
+    background: #f7f9fb;
+  }
+  .product-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 72px 72px 80px 36px;
+    gap: 8px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f0f2f5;
+    align-items: start;
+    font-size: 11px;
+  }
+  .product-row:last-child { border-bottom: none; }
+  .product-row.row-error { background: #fffbfb; }
+  .product-row.row-warn { background: #fffdf5; }
+
+  .product-thumb {
+    width: 32px;
+    height: 32px;
+    border-radius: 4px;
+    background: #e8edf0;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    color: #b0bec5;
+    overflow: hidden;
+  }
+
+  .product-info {}
+  .product-name { font-weight: 600; font-size: 12px; color: #32536a; margin-bottom: 2px; }
+  .product-sku { font-size: 10px; color: #b0bec5; margin-bottom: 4px; }
+  .product-issues { display: flex; flex-direction: column; gap: 2px; margin-top: 2px; }
+  .product-issue { font-size: 10px; display: flex; align-items: center; gap: 4px; }
+  .product-issue.error { color: #c62828; }
+  .product-issue.warn { color: #c17d00; }
+
+  .status-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding-top: 2px; }
+  .status-chip {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  .chip-synced { background: #e8f5ee; color: #2e7d32; }
+  .chip-failed { background: #fce8e8; color: #c62828; }
+  .chip-warn { background: #fff8e1; color: #c17d00; }
+  .chip-pending { background: #e8f0fe; color: #1a73e8; }
+
+  .ai-cell { display: flex; align-items: center; gap: 6px; padding-top: 4px; }
+  .toggle {
+    width: 30px;
+    height: 16px;
+    border-radius: 100px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .toggle.on { background: #116dff; }
+  .toggle.off { background: #c8d8e4; }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: white;
+  }
+  .toggle.on::after { right: 2px; }
+  .toggle.off::after { left: 2px; }
+  .ai-label { font-size: 10px; color: #7a92a5; }
+
+  .action-cell { padding-top: 4px; }
+  .mini-btn { font-size: 10px; color: #116dff; font-weight: 600; }
+
+  /* Expanded row detail */
+  .expanded-detail {
+    background: #f7f9fb;
+    border-top: 1px solid #e8edf0;
+    padding: 12px 14px 12px 58px;
+    font-size: 11px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+  }
+  .detail-section-title { font-size: 10px; font-weight: 700; text-transform: uppercase; color: #7a92a5; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .detail-field { margin-bottom: 5px; }
+  .detail-field-label { font-size: 10px; color: #7a92a5; margin-bottom: 1px; }
+  .detail-field-value { font-size: 11px; color: #32536a; }
+  .detail-fix-input {
+    border: 1px solid #116dff;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: #32536a;
+    background: white;
+    width: 100%;
+  }
+
+  /* Annotations */
+  .annotation-box {
+    background: #f0f6ff;
+    border: 1px solid #c5d8ff;
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-top: 16px;
+    font-size: 12px;
+    color: #32536a;
+    line-height: 1.6;
+  }
+  .annotation-box strong { color: #116dff; }
+  .callout-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .callout-item { display: flex; gap: 8px; }
+  .callout-item .num { background: #116dff; color: white; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 100px; height: fit-content; margin-top: 1px; flex-shrink: 0; }
+
+  .spacer { height: 32px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <h1>SyncStream — Detailed Design</h1>
+  <span class="badge">Approved Direction: A + C · Unified Products</span>
+</div>
+
+<div class="container">
+
+  <!-- ===================== DASHBOARD TAB ===================== -->
+  <div class="section-wrap">
+    <div class="section-label">Dashboard Tab</div>
+    <div style="height:12px"></div>
+
+    <div class="mockup">
+      <div class="mockup-topbar">
+        <span class="logo">SyncStream</span>
+        <span class="site">My Clothing Store</span>
+      </div>
+      <div class="mockup-tabs">
+        <span class="mockup-tab">Connect</span>
+        <span class="mockup-tab active">Dashboard</span>
+        <span class="mockup-tab">Products</span>
+        <span class="mockup-tab">Field Mapping</span>
+        <span class="mockup-tab">Settings</span>
+      </div>
+      <div class="mockup-body">
+
+        <!-- Stat cards -->
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-card-num num-total">30</div>
+            <div class="stat-card-label">Total Products</div>
+            <div class="stat-card-sub">in catalog</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-num num-synced">19</div>
+            <div class="stat-card-label">Synced</div>
+            <div class="stat-card-sub">to GMC + Meta</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-num num-failed">11</div>
+            <div class="stat-card-label">Failed</div>
+            <div class="stat-card-sub">need attention</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-num num-warn">3</div>
+            <div class="stat-card-label">Warnings</div>
+            <div class="stat-card-sub">missing SKUs</div>
+          </div>
+        </div>
+
+        <!-- Feed Health + actions side by side -->
+        <div class="health-card">
+          <div class="health-card-header">
+            <span class="health-card-title">Feed Health</span>
+            <span class="health-link">Last synced 2 min ago</span>
+          </div>
+          <div class="platform-health">
+            <div class="ph-item">
+              <div class="ph-header">
+                <span class="ph-name">Google Merchant Center</span>
+                <span class="ph-pct" style="color:#3db37a">63%</span>
+              </div>
+              <div class="ph-bar"><div class="ph-fill" style="width:63%;background:#3db37a"></div></div>
+              <div class="ph-meta">19 of 30 products passing · 11 errors</div>
+            </div>
+            <div class="ph-item">
+              <div class="ph-header">
+                <span class="ph-name">Meta Catalog</span>
+                <span class="ph-pct" style="color:#116dff">80%</span>
+              </div>
+              <div class="ph-bar"><div class="ph-fill" style="width:80%;background:#116dff"></div></div>
+              <div class="ph-meta">24 of 30 products passing · 6 errors</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="actions-row">
+          <div class="btn btn-primary"><span class="btn-icon">⟳</span>Sync Now</div>
+          <div class="btn btn-warn"><span class="btn-icon">⚠</span>Fix Issues (11)</div>
+          <div class="btn btn-secondary"><span class="btn-icon">✦</span>Check Compliance</div>
+        </div>
+
+        <!-- Two-col: activity + issues -->
+        <div class="two-col">
+          <div class="activity-card">
+            <div class="activity-header">Recent Activity</div>
+            <div class="activity-row">
+              <span class="activity-dot" style="background:#e53935"></span>
+              <span class="activity-msg">11 products failed — missing brand field</span>
+              <span class="activity-time">2 min ago</span>
+            </div>
+            <div class="activity-row">
+              <span class="activity-dot" style="background:#3db37a"></span>
+              <span class="activity-msg">19 products synced to GMC</span>
+              <span class="activity-time">2 min ago</span>
+            </div>
+            <div class="activity-row">
+              <span class="activity-dot" style="background:#3db37a"></span>
+              <span class="activity-msg">30 products synced successfully</span>
+              <span class="activity-time">6 hr ago</span>
+            </div>
+            <div class="activity-row">
+              <span class="activity-dot" style="background:#116dff"></span>
+              <span class="activity-msg">Compliance check completed</span>
+              <span class="activity-time">Yesterday</span>
+            </div>
+          </div>
+          <div class="issues-panel">
+            <div class="issues-header">
+              <span>Top Issues</span>
+              <span class="issues-count">11</span>
+            </div>
+            <div class="issue-row">
+              <span class="issue-name">Missing brand (8 products)</span>
+              <span class="issue-tag tag-error">Error</span>
+            </div>
+            <div class="issue-row">
+              <span class="issue-name">No SKU set (3 products)</span>
+              <span class="issue-tag tag-warn">Warning</span>
+            </div>
+            <div class="issue-row">
+              <span class="issue-name">Description too short (2)</span>
+              <span class="issue-tag tag-warn">Warning</span>
+            </div>
+            <div class="issue-row">
+              <span class="issue-name">Missing image (1 product)</span>
+              <span class="issue-tag tag-error">Error</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /mockup-body -->
+    </div><!-- /mockup -->
+
+    <div class="annotation-box">
+      <strong>Dashboard shows the merchant's feed at a glance.</strong>
+      <div class="callout-list">
+        <div class="callout-item"><span class="num">1</span><span>Four stat cards always show total / synced / failed / warnings — failures can never be hidden or green-washed.</span></div>
+        <div class="callout-item"><span class="num">2</span><span>Feed health bars per platform (GMC + Meta) give a % score so the merchant knows which channel needs work.</span></div>
+        <div class="callout-item"><span class="num">3</span><span>"Fix Issues" button goes directly to Products tab filtered to failed products.</span></div>
+        <div class="callout-item"><span class="num">4</span><span>Top Issues panel aggregates error types so merchant understands the biggest lever (e.g. "fix brand on 8 products = biggest win").</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PRODUCTS TAB ===================== -->
+  <div class="section-wrap">
+    <div class="section-label">Products Tab — Unified Table</div>
+    <div style="height:12px"></div>
+
+    <div class="mockup">
+      <div class="mockup-topbar">
+        <span class="logo">SyncStream</span>
+        <span class="site">My Clothing Store</span>
+      </div>
+      <div class="mockup-tabs">
+        <span class="mockup-tab">Connect</span>
+        <span class="mockup-tab">Dashboard</span>
+        <span class="mockup-tab active">Products</span>
+        <span class="mockup-tab">Field Mapping</span>
+        <span class="mockup-tab">Settings</span>
+      </div>
+      <div class="mockup-body">
+
+        <!-- Toolbar: filter tabs + search + actions -->
+        <div class="products-toolbar">
+          <div class="filter-tabs">
+            <span class="filter-tab all">All (30)</span>
+            <span class="filter-tab failed">Failed (11)</span>
+            <span class="filter-tab warn">Warnings (3)</span>
+            <span class="filter-tab ok">Synced (19)</span>
+          </div>
+          <div class="search-box">Search products...</div>
+          <div class="btn btn-secondary" style="font-size:11px;padding:6px 12px">⟳ Check All</div>
+          <div class="btn btn-primary" style="font-size:11px;padding:6px 12px">⟳ Sync Now</div>
+        </div>
+
+        <!-- Product table -->
+        <div class="product-table">
+          <div class="product-table-header">
+            <span></span>
+            <span>Product</span>
+            <span>GMC</span>
+            <span>Meta</span>
+            <span>SyncStream AI</span>
+            <span></span>
+          </div>
+
+          <!-- Row 1: Synced, AI on -->
+          <div class="product-row">
+            <div class="product-thumb" style="background:#c8e6c9">👕</div>
+            <div class="product-info">
+              <div class="product-name">Blue Denim Jacket</div>
+              <div class="product-sku">SKU: DJ-001 · 3 variants</div>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-synced">✓ Synced</span>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-synced">✓ Synced</span>
+            </div>
+            <div class="ai-cell">
+              <div class="toggle on"></div>
+              <span class="ai-label">Enhanced</span>
+            </div>
+            <div class="action-cell"><span class="mini-btn">›</span></div>
+          </div>
+
+          <!-- Row 2: Failed, AI off — EXPANDED -->
+          <div class="product-row row-error">
+            <div class="product-thumb" style="background:#ffcdd2">👗</div>
+            <div class="product-info">
+              <div class="product-name">Summer Floral Dress</div>
+              <div class="product-sku">No SKU · 1 variant</div>
+              <div class="product-issues">
+                <div class="product-issue error">✕ Missing brand</div>
+                <div class="product-issue error">✕ Description too short (&lt;20 chars)</div>
+                <div class="product-issue warn">⚠ No SKU — fallback ID in use</div>
+              </div>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-failed">✕ Failed</span>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-failed">✕ Failed</span>
+            </div>
+            <div class="ai-cell">
+              <div class="toggle off"></div>
+              <span class="ai-label">Off</span>
+            </div>
+            <div class="action-cell"><span class="mini-btn" style="color:#e53935">Fix</span></div>
+          </div>
+
+          <!-- Expanded fix panel for the above row -->
+          <div class="expanded-detail">
+            <div>
+              <div class="detail-section-title">Fix Issues</div>
+              <div class="detail-field">
+                <div class="detail-field-label">Brand (required)</div>
+                <input class="detail-fix-input" value="Your Brand Name" />
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-label">Description (required)</div>
+                <input class="detail-fix-input" value="Lightweight floral summer dress..." />
+              </div>
+              <div style="display:flex;gap:6px;margin-top:8px">
+                <div class="btn btn-secondary" style="font-size:10px;padding:5px 10px">Apply to Wix</div>
+                <div class="btn btn-secondary" style="font-size:10px;padding:5px 10px">Apply to GMC</div>
+                <div class="btn btn-primary" style="font-size:10px;padding:5px 10px">Apply Both</div>
+              </div>
+            </div>
+            <div>
+              <div class="detail-section-title">Current Feed Values</div>
+              <div class="detail-field">
+                <div class="detail-field-label">Title</div>
+                <div class="detail-field-value">Summer Floral Dress</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-label">Price</div>
+                <div class="detail-field-value">49.99 USD</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-label">Availability</div>
+                <div class="detail-field-value">in_stock</div>
+              </div>
+              <div class="detail-field">
+                <div class="detail-field-label">Image</div>
+                <div style="width:48px;height:48px;background:#ffcdd2;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;margin-top:2px">👗</div>
+              </div>
+            </div>
+            <div>
+              <div class="detail-section-title">SyncStream AI</div>
+              <div style="font-size:11px;color:#7a92a5;margin-bottom:8px">Generate SEO-optimized descriptions and titles for this product.</div>
+              <div class="btn btn-secondary" style="font-size:10px;padding:5px 10px;display:inline-block;margin-bottom:8px">✦ Enhance This Product</div>
+              <div style="font-size:10px;color:#b0bec5">AI enhancement disabled for this product. Toggle on to auto-enhance on next sync.</div>
+            </div>
+          </div>
+
+          <!-- Row 3: Warning -->
+          <div class="product-row row-warn">
+            <div class="product-thumb" style="background:#fff9c4">👕</div>
+            <div class="product-info">
+              <div class="product-name">Classic White Tee</div>
+              <div class="product-sku">No SKU · 2 variants</div>
+              <div class="product-issues">
+                <div class="product-issue warn">⚠ No SKU — using fallback ID (wt-abc123_xyz)</div>
+              </div>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-synced">✓ Synced</span>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-warn">⚠ Warning</span>
+            </div>
+            <div class="ai-cell">
+              <div class="toggle on"></div>
+              <span class="ai-label">Enhanced</span>
+            </div>
+            <div class="action-cell"><span class="mini-btn">›</span></div>
+          </div>
+
+          <!-- Row 4: Synced -->
+          <div class="product-row">
+            <div class="product-thumb" style="background:#e3f2fd">👖</div>
+            <div class="product-info">
+              <div class="product-name">Slim Fit Chinos</div>
+              <div class="product-sku">SKU: CH-003 · 4 variants</div>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-synced">✓ Synced</span>
+            </div>
+            <div class="status-cell">
+              <span class="status-chip chip-synced">✓ Synced</span>
+            </div>
+            <div class="ai-cell">
+              <div class="toggle off"></div>
+              <span class="ai-label">Off</span>
+            </div>
+            <div class="action-cell"><span class="mini-btn">›</span></div>
+          </div>
+
+          <div style="padding:10px 14px;font-size:11px;color:#b0bec5;text-align:center;border-top:1px solid #f0f2f5">
+            + 26 more products · showing 4 of 30
+          </div>
+
+        </div><!-- /product-table -->
+
+      </div><!-- /mockup-body -->
+    </div><!-- /mockup -->
+
+    <div class="annotation-box">
+      <strong>Products tab is one unified view — no sub-tabs.</strong>
+      <div class="callout-list">
+        <div class="callout-item"><span class="num">1</span><span>Filter tabs (All / Failed / Warnings / Synced) replace the old Products / Compliance / AI sub-tabs. One place to see everything.</span></div>
+        <div class="callout-item"><span class="num">2</span><span>Each row shows GMC status + Meta status + AI toggle. Errors and warnings surface inline under the product name — no clicking through to a separate compliance screen.</span></div>
+        <div class="callout-item"><span class="num">3</span><span>Clicking "Fix" expands the row in-place with a three-panel detail: fix inputs (with Apply to Wix / GMC / Both), current feed values, and AI enhancement toggle/button for that product.</span></div>
+        <div class="callout-item"><span class="num">4</span><span>SyncStream AI toggle per product lives in the table — merchant can enable/disable per product without leaving the list view.</span></div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /container -->
+</body>
+</html>
