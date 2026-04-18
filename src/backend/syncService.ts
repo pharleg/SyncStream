@@ -28,6 +28,7 @@ import {
   getCachedProductsByIds,
   upsertSyncProgress,
   getSyncContext,
+  upsertSyncEvent,
 } from './dataService';
 
 /** Run async tasks with a concurrency limit. */
@@ -508,10 +509,28 @@ export async function runPaginatedSync(
     progress.failedCount = allResults.filter((r) => !r.success).length;
     progress.updatedAt = new Date().toISOString();
     await tryProgress(progress);
+    // Write activity event (best-effort — don't fail the sync if this fails)
+    const failedCount = progress.failedCount;
+    const syncedCount = progress.syncedCount;
+    await upsertSyncEvent({
+      instanceId,
+      eventType: failedCount > 0 ? 'sync_error' : 'sync_complete',
+      message: failedCount > 0
+        ? `${syncedCount} synced, ${failedCount} failed out of ${totalProducts} products`
+        : `${syncedCount} products synced successfully`,
+      severity: failedCount > 0 ? 'error' : 'success',
+      productCount: totalProducts,
+    }).catch(() => {});
   } catch (error) {
     progress.currentStatus = 'error';
     progress.error = error instanceof Error ? error.message : 'Unknown error';
     await tryProgress(progress);
+    await upsertSyncEvent({
+      instanceId,
+      eventType: 'sync_error',
+      message: progress.error,
+      severity: 'error',
+    }).catch(() => {});
     throw error;
   }
 
