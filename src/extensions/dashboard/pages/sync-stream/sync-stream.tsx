@@ -1698,7 +1698,11 @@ const SyncStreamPage: FC = () => {
               items={TAB_ITEMS}
               activeId={activeTab}
               onClick={(tab) => {
-                setActiveTab(String(tab.id));
+                const tabId = String(tab.id);
+                if (tabId === 'products') {
+                  setProductsFilter('all');
+                }
+                setActiveTab(tabId);
               }}
               type="compactSide"
             />

@@ -156,7 +156,11 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
           {syncing ? <Loader size="tiny" /> : 'Sync Now'}
         </Button>
         {stats.failed > 0 && (
-          <Button skin="light" onClick={onNavigateToFailed}>
+          <Button
+            skin="light"
+            onClick={onNavigateToFailed}
+            style={{ color: '#c17d00', borderColor: '#f5d67a', background: '#fff8e1' }}
+          >
             Fix Issues ({stats.failed})
           </Button>
         )}
