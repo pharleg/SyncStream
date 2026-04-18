@@ -22,6 +22,10 @@ import '@wix/design-system/styles.global.css';
 import { httpClient } from '@wix/essentials';
 import { dashboard } from '@wix/dashboard';
 import { FixWizard } from './FixWizard';
+import { DashboardTabNormal, type DashboardStats, type PlatformHealth } from './DashboardTab';
+import { ProductsTab as ProductsTabComponent } from './ProductsTab';
+import type { ProductRowData, ApplyFixPayload } from './ProductRow';
+import type { SyncEvent, TopIssue } from '../../../../backend/dataService';
 
 async function appFetch(path: string, init?: RequestInit): Promise<Response> {
   const baseUrl = new URL(import.meta.url).origin;
@@ -92,6 +96,18 @@ interface SyncSummary {
   issueGroups: IssueGroup[];
 }
 
+interface SyncStatusData extends SyncSummary {
+  totalWarnings: number;
+  platformHealth: {
+    gmc: PlatformHealth;
+    meta: PlatformHealth;
+  };
+  topIssues: {
+    gmc: TopIssue[];
+    meta: TopIssue[];
+  };
+}
+
 async function fetchAppConfig(): Promise<AppConfigData | null> {
   const response = await appFetch('/api/app-config?instanceId=default');
   if (!response.ok) return null;
@@ -117,6 +133,13 @@ async function fetchSyncStatus(): Promise<SyncSummary> {
     throw new Error((data as any).error ?? 'Failed to fetch sync status');
   }
   return response.json();
+}
+
+async function fetchSyncEvents(): Promise<SyncEvent[]> {
+  const response = await appFetch('/api/sync-events?instanceId=default&limit=10');
+  if (!response.ok) return [];
+  const data = await response.json();
+  return (data as { events?: SyncEvent[] }).events ?? [];
 }
 
 async function triggerSync(): Promise<{ total: number; synced: number; failed: number }> {
@@ -998,1191 +1021,122 @@ function applyClientFilter(
   });
 }
 
-const ProductsTab: FC<{ config: AppConfigData | null; onConfigRefresh: () => void }> = ({
-  config: _config,             // used in Task 10 (Fix with AI) and Task 11 (AI sub-tab settings)
-  onConfigRefresh: _onConfigRefresh, // used in Task 11 (AI style/tone save)
-}) => {
-  const [productsSubTab, setProductsSubTab] = useState('products');
-  const [products, setProducts] = useState<CachedProductRow[]>([]);
-  const [filteredProducts, setFilteredProducts] = useState<CachedProductRow[]>([]);
-  const [cachedAt, setCachedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [pulling, setPulling] = useState(false);
-  const [syncing, setSyncing] = useState(false);
-  const [enhancing, setEnhancing] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+const ProductsTab: FC<{
+  config: AppConfigData | null;
+  onConfigRefresh: () => void;
+  initialFilter?: 'all' | 'failed' | 'warnings' | 'synced';
+}> = ({ config, initialFilter = 'all' }) => {
+  const [products, setProducts] = useState<ProductRowData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
-  const [filterField, setFilterField] = useState('name');
-  const [filterOperator, setFilterOperator] = useState('contains');
-  const [filterValue, setFilterValue] = useState('');
-  const [activeFilter, setActiveFilter] = useState<{ field: string; operator: string; value: string } | null>(null);
-
-  const [previewData, setPreviewData] = useState<Map<string, any> | null>(null);
-  const [previewing, setPreviewing] = useState(false);
-
-  const [aiPreviews, setAiPreviews] = useState<Array<{
-    productId: string;
-    original: { title: string; description: string };
-    enhanced: { title: string; description: string } | null;
-    accepted: boolean;
-  }> | null>(null);
-  const [aiPreviewLoading, setAiPreviewLoading] = useState(false);
-  const [aiApplying, setAiApplying] = useState(false);
-  const [complianceLoading, setComplianceLoading] = useState(false);
-  const [compliance, setCompliance] = useState<{
-    healthScore: number;
-    totalProducts: number;
-    compliantCount: number;
-    warningCount: number;
-    errorCount: number;
-    results: Array<{
-      productId: string;
-      offerId: string;
-      errors: Array<{ field: string; message: string; severity: string }>;
-      warnings: Array<{ field: string; message: string; severity: string }>;
-      compliant: boolean;
-    }>;
-  } | null>(null);
-  const [expandedCompliance, setExpandedCompliance] = useState<string | null>(null);
-  // Pending compliance fixes: offerId → { field → corrected value }
-  const [pendingFixes, setPendingFixes] = useState<Map<string, Map<string, string>>>(new Map());
-  // Which issue is currently being edited: "offerId:field"
-  const [editingFix, setEditingFix] = useState<string | null>(null);
-  const [editingFixValue, setEditingFixValue] = useState('');
-  const [applyingFixes, setApplyingFixes] = useState(false);
-  // Tracks which issue key ("offerId:field") has an in-flight AI fix request
-  const [aiFixLoading, setAiFixLoading] = useState<Set<string>>(new Set());
-
-  const [overrideCounts, setOverrideCounts] = useState<Map<string, number>>(new Map());
-  const [overrideDetails, setOverrideDetails] = useState<Map<string, Record<string, string>>>(new Map());
-  const [openOverridePopover, setOpenOverridePopover] = useState<string | null>(null);
-
-  const [aiStyle, setAiStyle] = useState(_config?.aiEnhancementStyle ?? '');
-  const [savingAiStyle, setSavingAiStyle] = useState(false);
-
-  const [wizardActive, setWizardActive] = useState(false);
-  const [wizardIssueGroups, setWizardIssueGroups] = useState<IssueGroup[]>([]);
-  const [launchingWizard, setLaunchingWizard] = useState(false);
-
-  const handleSaveAiStyle = useCallback(async (value: string) => {
-    setSavingAiStyle(true);
-    try {
-      await saveAppConfig({ aiEnhancementStyle: value });
-      await _onConfigRefresh();
-    } catch { /* silent */ }
-    finally { setSavingAiStyle(false); }
-  }, [_onConfigRefresh]);
-
-  const handleLaunchWizard = useCallback(async () => {
-    setLaunchingWizard(true);
-    try {
-      const res = await appFetch('/api/sync-status?instanceId=default');
-      const data = await res.json();
-      setWizardIssueGroups(data.issueGroups ?? []);
-      setWizardActive(true);
-    } catch {
-      setWizardIssueGroups([]);
-      setWizardActive(true);
-    } finally {
-      setLaunchingWizard(false);
-    }
-  }, []);
-
-  const loadOverrideCounts = useCallback(async () => {
-    if (products.length === 0) return;
-    const ids = products.map((p) => p.productId).join(',');
-    try {
-      const response = await appFetch(`/api/gmc-overrides?productIds=${encodeURIComponent(ids)}`);
-      const data = await response.json();
-      const countMap = new Map<string, number>();
-      const detailMap = new Map<string, Record<string, string>>();
-      for (const [id, count] of Object.entries(data.counts ?? {})) {
-        countMap.set(id, count as number);
-      }
-      for (const [id, fields] of Object.entries(data.details ?? {})) {
-        detailMap.set(id, fields as Record<string, string>);
-      }
-      setOverrideCounts(countMap);
-      setOverrideDetails(detailMap);
-    } catch { /* silent — overrides are best-effort UI */ }
-  }, [products]);
-
-  const pendingFixCount = Array.from(pendingFixes.values()).reduce((sum, m) => sum + m.size, 0);
-  // Keep module-level flag in sync for tab-change warning
-  useEffect(() => { _hasPendingFixes = pendingFixCount > 0; }, [pendingFixCount]);
-
-  const [productPlatforms, setProductPlatforms] = useState<Map<string, ('gmc' | 'meta')[] | null>>(new Map());
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
       const response = await appFetch('/api/products?instanceId=default');
       const data = await response.json();
-      setProducts(data.products ?? []);
-      setFilteredProducts(data.products ?? []);
-      setCachedAt(data.cachedAt);
-    } catch { /* empty cache */ }
-    finally { setLoading(false); }
-  }, []);
+      const rows: ProductRowData[] = ((data as { products?: any[] }).products ?? []).map((p: any) => {
+        const syncStatus = p.syncStatus as { status?: string; errorLog?: Array<{ field: string; message: string; severity: string }> } | undefined;
+        const errorLog = syncStatus?.errorLog ?? [];
+        const issues = errorLog.map((e) => ({
+          field: e.field,
+          message: e.message,
+          severity: (e.severity === 'warning' ? 'warning' : 'error') as 'error' | 'warning',
+        }));
+        return {
+          productId: p.productId as string,
+          name: p.name as string,
+          imageUrl: p.imageUrl as string | undefined,
+          sku: (p.productData?.sku ?? undefined) as string | undefined,
+          variantCount: (p.variantCount ?? 1) as number,
+          price: p.price as string | undefined,
+          availability: p.availability as string | undefined,
+          brand: p.brand as string | undefined,
+          description: p.plainDescription as string | undefined,
+          gmcStatus: (syncStatus?.status ?? null) as ProductRowData['gmcStatus'],
+          metaStatus: null,
+          gmcIssues: issues,
+          metaIssues: [],
+          aiEnabled: (p.aiEnabled ?? (config?.aiEnhancementEnabled ?? false)) as boolean,
+          enhancedTitle: (p.enhancedTitle ?? null) as string | null,
+          enhancedDescription: (p.enhancedDescription ?? null) as string | null,
+          lastEnhancedAt: null,
+        } satisfies ProductRowData;
+      });
+      setProducts(rows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load products');
+    } finally {
+      setLoading(false);
+    }
+  }, [config?.aiEnhancementEnabled]);
 
   useEffect(() => { loadProducts(); }, [loadProducts]);
 
-  useEffect(() => {
-    if (products.length > 0) loadOverrideCounts();
-  }, [products, loadOverrideCounts]);
-
-  const handlePull = useCallback(async () => {
-    setPulling(true); setError(null); setSuccess(null);
-    try {
-      const response = await appFetch('/api/products-pull', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default' }),
-      });
-      const data = await response.json();
-      setSuccess(`Pulled ${data.count} products from your store.`);
-      await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pull products');
-    } finally { setPulling(false); }
+  const handleSyncNow = useCallback(async () => {
+    await triggerSync();
+    await loadProducts();
   }, [loadProducts]);
 
-  const handlePreviewFilter = useCallback(() => {
-    if (!filterValue.trim()) { setFilteredProducts(products); setActiveFilter(null); return; }
-    const result = applyClientFilter(products, filterField, filterOperator, filterValue);
-    setFilteredProducts(result);
-    setActiveFilter({ field: filterField, operator: filterOperator, value: filterValue });
-  }, [products, filterField, filterOperator, filterValue]);
-
-  const handleClearFilter = useCallback(() => {
-    setFilteredProducts(products); setActiveFilter(null); setFilterValue('');
-  }, [products]);
-
-  const handlePinFilter = useCallback(async () => {
-    if (!activeFilter) return;
-    try {
-      await appFetch('/api/filters', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instanceId: 'default',
-          name: `${activeFilter.field} ${activeFilter.operator} "${activeFilter.value}"`,
-          platform: 'both', field: activeFilter.field,
-          operator: activeFilter.operator, value: activeFilter.value,
-          conditionGroup: 'AND', order: 0, enabled: true,
-        }),
-      });
-      setSuccess('Filter pinned — it will apply during sync.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to pin filter');
-    }
-  }, [activeFilter]);
-
-  const handlePreviewRules = useCallback(async () => {
-    if (previewData) { setPreviewData(null); return; }
-    setPreviewing(true); setError(null);
-    try {
-      const ids = filteredProducts.map((p) => p.productId);
-      const response = await appFetch('/api/products-preview-rules', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: ids }),
-      });
-      const data = await response.json();
-      const map = new Map<string, any>();
-      for (const p of data.previews ?? []) map.set(p.productId, p);
-      setPreviewData(map);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to preview rules');
-    } finally { setPreviewing(false); }
-  }, [filteredProducts, previewData]);
-
-  const handleEnhanceOne = useCallback(async (productId: string) => {
-    setEnhancing(productId); setError(null);
-    try {
-      await appFetch('/api/products-enhance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productId }),
-      });
-      await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Enhancement failed');
-    } finally { setEnhancing(null); }
+  const handleCheckCompliance = useCallback(async () => {
+    await appFetch('/api/compliance-check?instanceId=default');
+    await loadProducts();
   }, [loadProducts]);
 
-  const handleEnhanceBulk = useCallback(async () => {
-    if (selected.size === 0) return;
-    setEnhancing('bulk'); setError(null);
-    try {
-      const response = await appFetch('/api/products-enhance', {
+  const handleApplyFix = useCallback(async ({ productId, fixes, target }: ApplyFixPayload) => {
+    if (target === 'wix' || target === 'both') {
+      await appFetch('/api/compliance-apply-wix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: Array.from(selected) }),
-      });
-      const data = await response.json();
-      setSuccess(`Enhanced ${data.count} products.`);
-      await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Bulk enhancement failed');
-    } finally { setEnhancing(null); }
-  }, [selected, loadProducts]);
-
-  const handleEnhanceAndPreview = useCallback(async () => {
-    const targetIds = selected.size > 0
-      ? Array.from(selected)
-      : filteredProducts.map((p) => p.productId);
-    if (targetIds.length === 0) return;
-    setAiPreviewLoading(true); setError(null);
-    try {
-      const response = await appFetch('/api/products-apply-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: targetIds }),
-      });
-      const data = await response.json();
-      setAiPreviews(
-        (data.previews ?? []).map((p: any) => ({ ...p, accepted: true })),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate previews');
-    } finally { setAiPreviewLoading(false); }
-  }, [selected, filteredProducts]);
-
-  const handleApplyToStore = useCallback(async () => {
-    if (!aiPreviews) return;
-    const accepted = aiPreviews.filter((p) => p.accepted && p.enhanced);
-    if (accepted.length === 0) { setAiPreviews(null); return; }
-
-    setAiApplying(true); setError(null);
-    try {
-      const response = await appFetch('/api/products-apply-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          instanceId: 'default',
-          updates: accepted.map((p) => ({
-            productId: p.productId,
-            title: p.enhanced!.title,
-            description: p.enhanced!.description,
-          })),
-        }),
-      });
-      const data = await response.json();
-      const failedErrors = (data.results ?? []).filter((r: any) => !r.success).map((r: any) => r.error).join('; ');
-      if (data.applied > 0) {
-        setSuccess(`Applied AI descriptions to ${data.applied} products.${data.failed > 0 ? ` ${data.failed} failed: ${failedErrors}` : ''}`);
-      } else {
-        setError(`Failed to apply: ${failedErrors || 'Unknown error'}`);
-      }
-      setAiPreviews(null);
-      await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply enhancements');
-    } finally { setAiApplying(false); }
-  }, [aiPreviews, loadProducts]);
-
-  const handleComplianceCheck = useCallback(async () => {
-    setComplianceLoading(true); setError(null);
-    try {
-      const ids = selected.size > 0
-        ? Array.from(selected)
-        : filteredProducts.map((p) => p.productId);
-      const response = await appFetch('/api/compliance-check', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: ids, platform: 'gmc' }),
-      });
-      const data = await response.json();
-      if (data.error) { setError(data.error); return; }
-      setCompliance(data);
-      setSuccess(`Compliance check complete: ${data.healthScore}% healthy`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Compliance check failed');
-    } finally { setComplianceLoading(false); }
-  }, [selected, filteredProducts]);
-
-  const handlePlatformToggle = useCallback(async (productIds: string[], platform: 'gmc' | 'meta', enabled: boolean) => {
-    for (const id of productIds) {
-      const current = productPlatforms.get(id) ?? ['gmc', 'meta'];
-      const updated = enabled
-        ? [...new Set([...current, platform])]
-        : current.filter((p) => p !== platform);
-      const finalPlatforms = updated.length === 2 ? null : updated as ('gmc' | 'meta')[];
-
-      try {
-        await appFetch('/api/product-platforms', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ productIds: [id], platforms: finalPlatforms }),
-        });
-        setProductPlatforms((prev) => {
-          const next = new Map(prev);
-          next.set(id, finalPlatforms);
-          return next;
-        });
-      } catch {
-        setError('Failed to update platform targeting');
-      }
-    }
-  }, [productPlatforms]);
-
-  const handleStageFix = useCallback((offerId: string, field: string, value: string) => {
-    setPendingFixes((prev) => {
-      const next = new Map(prev);
-      const fieldMap = new Map(next.get(offerId) ?? []);
-      if (value.trim()) {
-        fieldMap.set(field, value.trim());
-      } else {
-        fieldMap.delete(field);
-      }
-      if (fieldMap.size > 0) {
-        next.set(offerId, fieldMap);
-      } else {
-        next.delete(offerId);
-      }
-      return next;
-    });
-    setEditingFix(null);
-    setEditingFixValue('');
-  }, []);
-
-  const handleFixWithAi = useCallback(async (offerId: string, productId: string, field: 'description' | 'title') => {
-    const issueKey = `${offerId}:${field}`;
-    setAiFixLoading((prev) => new Set([...prev, issueKey]));
-    try {
-      const response = await appFetch('/api/products-apply-ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: [productId] }),
-      });
-      const data = await response.json();
-      const preview = (data.previews ?? [])[0];
-      if (!preview?.enhanced) {
-        setError('AI enhancement returned no result for this product.');
-        return;
-      }
-      const suggestedValue = field === 'description'
-        ? preview.enhanced.description
-        : preview.enhanced.title;
-      setEditingFix(issueKey);
-      setEditingFixValue(suggestedValue ?? '');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'AI fix failed');
-    } finally {
-      setAiFixLoading((prev) => {
-        const next = new Set(prev);
-        next.delete(issueKey);
-        return next;
+        body: JSON.stringify({ instanceId: 'default', productId, fixes }),
       });
     }
-  }, []);
-
-  const handleApplyFixes = useCallback(async (target: 'wix' | 'gmc' | 'both') => {
-    if (pendingFixes.size === 0) return;
-    setApplyingFixes(true); setError(null);
-    try {
-      // Flatten all staged fixes into a list of { productId, field, value }
-      const fixEntries: Array<{ productId: string; field: string; value: string }> = [];
-      for (const [offerId, fieldMap] of pendingFixes) {
-        const result = compliance?.results.find((r) => r.offerId === offerId);
-        if (!result) continue;
-        for (const [field, value] of fieldMap) {
-          fixEntries.push({ productId: result.productId, field, value });
-        }
-      }
-
-      if (fixEntries.length === 0) {
-        setPendingFixes(new Map());
-        return;
-      }
-
-      let wixApplied = 0;
-      let gmcSynced = 0;
-
-      // Only title/description can be written back to Wix; other fields are GMC-only overrides.
-      const wixEligibleCount = fixEntries.filter((e) => e.field === 'title' || e.field === 'description').length;
-
-      if (target === 'wix' || target === 'both') {
-        if (wixEligibleCount > 0) {
-          const response = await appFetch('/api/compliance-apply-wix', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fixes: fixEntries }),
-          });
-          const data = await response.json();
-          if (data.error) throw new Error(data.error);
-          wixApplied = data.applied ?? 0;
-        }
-      }
-
-      if (target === 'gmc' || target === 'both') {
-        const response = await appFetch('/api/compliance-apply-gmc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fixes: fixEntries }),
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error);
-        gmcSynced = data.synced ?? 0;
-        // Reload override counts after applying
-        await loadOverrideCounts();
-      }
-
-      setPendingFixes(new Map());
-      if (target === 'wix') setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix.`);
-      else if (target === 'gmc') setSuccess(`Applied to GMC — ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} re-synced.`);
-      else if (wixEligibleCount === 0) setSuccess(`Re-synced ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} to GMC.`);
-      else setSuccess(`Applied ${wixApplied} fix${wixApplied !== 1 ? 'es' : ''} to Wix and re-synced ${gmcSynced} product${gmcSynced !== 1 ? 's' : ''} to GMC.`);
-
-      if (target === 'wix' || target === 'both') await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to apply fixes');
-    } finally { setApplyingFixes(false); }
-  }, [pendingFixes, compliance, loadProducts, loadOverrideCounts]);
-
-  const handleSyncProducts = useCallback(async () => {
-    const ids = selected.size > 0 ? Array.from(selected) : filteredProducts.map((p) => p.productId);
-    if (ids.length === 0) return;
-    setSyncing(true); setError(null); setSuccess(null);
-    try {
-      const response = await appFetch('/api/products-sync', {
+    if (target === 'gmc' || target === 'both') {
+      const entries = Object.entries(fixes).map(([field, value]) => ({ field, value }));
+      await appFetch('/api/compliance-apply-gmc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productIds: ids, platforms: ['gmc'] }),
+        body: JSON.stringify({ instanceId: 'default', productId, fixes: entries }),
       });
-      const data = await response.json();
-      setSuccess(`Sync complete: ${data.synced} synced, ${data.failed} failed out of ${data.total}.`);
-      await loadProducts();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Sync failed');
-    } finally { setSyncing(false); }
-  }, [selected, filteredProducts, loadProducts]);
+    }
+    await loadProducts();
+  }, [loadProducts]);
 
-  const toggleSelect = useCallback((productId: string) => {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) next.delete(productId); else next.add(productId);
-      return next;
+  const handleToggleAI = useCallback(async (_productId: string, _enabled: boolean) => {
+    // Phase 4: persist ai_enabled per product to sync_state
+    await loadProducts();
+  }, [loadProducts]);
+
+  const handleEnhanceNow = useCallback(async (productId: string) => {
+    await appFetch('/api/products-enhance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instanceId: 'default', productIds: [productId] }),
     });
-  }, []);
+    await loadProducts();
+  }, [loadProducts]);
 
-  const toggleSelectAll = useCallback(() => {
-    if (selected.size === filteredProducts.length) setSelected(new Set());
-    else setSelected(new Set(filteredProducts.map((p) => p.productId)));
-  }, [selected, filteredProducts]);
-
-  if (loading) return <Box align="center" padding="60px"><Loader /></Box>;
-
-  const errorProductCount = products.filter(p => p.syncStatus?.status === 'error').length;
-
-  if (wizardActive && _config) {
-    return (
-      <FixWizard
-        issueGroups={wizardIssueGroups}
-        config={_config}
-        onComplete={async () => {
-          setWizardActive(false);
-          await loadProducts();
-        }}
-      />
-    );
+  if (error) {
+    return <SectionHelper appearance="danger">{error}</SectionHelper>;
   }
 
   return (
-    <Box direction="vertical" gap="18px">
-      <Box direction="vertical" gap="18px">
-      {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
-      {success && <SectionHelper appearance="success">{success}</SectionHelper>}
-
-      {pendingFixCount > 0 && (
-        <SectionHelper appearance="warning">
-          <Box direction="horizontal" gap="12px" verticalAlign="middle">
-            <Text size="small" weight="bold">{pendingFixCount} staged fix{pendingFixCount > 1 ? 'es' : ''} pending</Text>
-            <Button size="small" onClick={() => handleApplyFixes('wix')} disabled={applyingFixes}>
-              {applyingFixes ? 'Applying...' : 'Apply to Wix'}
-            </Button>
-            <Button size="small" skin="light" onClick={() => handleApplyFixes('gmc')} disabled={applyingFixes}>
-              Apply to GMC
-            </Button>
-            <Button size="small" skin="premium" onClick={() => handleApplyFixes('both')} disabled={applyingFixes}>
-              Apply to Both
-            </Button>
-            <Button size="small" skin="destructive" onClick={() => setPendingFixes(new Map())}>
-              Discard All
-            </Button>
-          </Box>
-        </SectionHelper>
-      )}
-
-      <Tabs
-        items={PRODUCTS_SUB_TABS}
-        activeId={productsSubTab}
-        onClick={(tab) => setProductsSubTab(String(tab.id))}
-      />
-
-      {productsSubTab === 'products' && (
-        <Box direction="vertical" gap="18px">
-          {errorProductCount > 0 && (
-            <Box verticalAlign="middle" gap="12px">
-              <Text size="small" secondary>
-                {errorProductCount} product{errorProductCount !== 1 ? 's' : ''} have sync errors
-              </Text>
-              <Button
-                size="small"
-                onClick={handleLaunchWizard}
-                disabled={launchingWizard}
-              >
-                {launchingWizard ? 'Loading…' : 'Fix Issues →'}
-              </Button>
-            </Box>
-          )}
-          {/* Toolbar */}
-          <Box gap="12px" verticalAlign="middle">
-            <Button size="small" onClick={handlePull} disabled={pulling}>
-              {pulling ? 'Pulling...' : 'Pull Products'}
-            </Button>
-            {cachedAt && <Text size="tiny" secondary>Last refreshed: {new Date(cachedAt).toLocaleString()}</Text>}
-            <Box marginLeft="auto" gap="12px">
-              <Button size="small" onClick={handlePreviewRules} disabled={previewing || products.length === 0}>
-                {previewing ? 'Loading...' : previewData ? 'Clear Preview' : 'Preview Rules'}
-              </Button>
-              <Button size="small" skin="dark" onClick={handleSyncProducts} disabled={syncing || products.length === 0}>
-                {syncing ? 'Syncing...' : `Sync ${selected.size > 0 ? selected.size : filteredProducts.length} Products`}
-              </Button>
-            </Box>
-          </Box>
-
-          {/* Filter bar */}
-          <Card>
-            <Card.Content>
-              <Box gap="12px" verticalAlign="bottom">
-                <Box width="150px">
-                  <FormField label="Field">
-                    <Dropdown size="small" options={FILTER_FIELD_OPTIONS} selectedId={filterField} onSelect={(o) => setFilterField(o.id as string)} />
-                  </FormField>
-                </Box>
-                <Box width="150px">
-                  <FormField label="Operator">
-                    <Dropdown size="small" options={FILTER_OP_OPTIONS} selectedId={filterOperator} onSelect={(o) => setFilterOperator(o.id as string)} />
-                  </FormField>
-                </Box>
-                <Box width="200px">
-                  <FormField label="Value">
-                    <Input size="small" value={filterValue} onChange={(e) => setFilterValue(e.target.value)} placeholder="Filter value..." />
-                  </FormField>
-                </Box>
-                <Button size="small" onClick={handlePreviewFilter}>Preview</Button>
-                {activeFilter && (
-                  <>
-                    <Button size="small" skin="light" onClick={handlePinFilter}>Pin Filter</Button>
-                    <Button size="small" skin="light" onClick={handleClearFilter}>Clear</Button>
-                  </>
-                )}
-              </Box>
-              {activeFilter && (
-                <Box marginTop="6px">
-                  <Badge size="small" skin="general">{activeFilter.field} {activeFilter.operator} &quot;{activeFilter.value}&quot;</Badge>
-                </Box>
-              )}
-            </Card.Content>
-          </Card>
-
-          {/* Empty state */}
-          {products.length === 0 && (
-            <Card>
-              <Card.Content>
-                <Box direction="vertical" align="center" padding="48px" gap="12px">
-                  <Text weight="bold">No products loaded</Text>
-                  <Text size="small" secondary>Click &quot;Pull Products&quot; to fetch your store catalog.</Text>
-                </Box>
-              </Card.Content>
-            </Card>
-          )}
-
-          {/* Product table */}
-          {filteredProducts.length > 0 && (
-            <Card>
-              <Table
-                data={filteredProducts}
-                columns={[
-                  {
-                    title: (
-                      <input
-                        type="checkbox"
-                        checked={filteredProducts.length > 0 && selected.size === filteredProducts.length}
-                        onChange={toggleSelectAll}
-                        title="Select all"
-                      />
-                    ),
-                    render: (row: CachedProductRow) => (
-                      <input type="checkbox" checked={selected.has(row.productId)} onChange={() => toggleSelect(row.productId)} />
-                    ),
-                    width: '40px',
-                  },
-                  {
-                    title: 'Image',
-                    render: (row: CachedProductRow) => (
-                      row.imageUrl
-                        ? <img
-                            src={row.imageUrl}
-                            alt={row.name ?? ''}
-                            style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, cursor: 'pointer' }}
-                            title="Image being synced to GMC/Meta"
-                          />
-                        : <Box width="40px" height="40px" />
-                    ),
-                    width: '60px',
-                  },
-                  {
-                    title: 'Title',
-                    render: (row: CachedProductRow) => {
-                      const preview = previewData?.get(row.productId);
-                      if (preview && preview.original.title !== preview.transformed.title) {
-                        return (
-                          <Box direction="vertical">
-                            <Text size="small" style={{ textDecoration: 'line-through' }}>{preview.original.title}</Text>
-                            <Text size="small" skin="success">{preview.transformed.title}</Text>
-                          </Box>
-                        );
-                      }
-                      return <Text size="small">{row.name}</Text>;
-                    },
-                    width: '18%',
-                  },
-                  {
-                    title: 'Price',
-                    render: (row: CachedProductRow) => <Text size="small">{row.price ? `$${row.price}` : '—'}</Text>,
-                    width: '70px',
-                  },
-                  {
-                    title: 'Stock',
-                    render: (row: CachedProductRow) => (
-                      <Badge size="small" skin={row.availability === 'IN_STOCK' ? 'success' : 'danger'}>
-                        {row.availability === 'IN_STOCK' ? 'In Stock' : 'Out'}
-                      </Badge>
-                    ),
-                    width: '80px',
-                  },
-                  {
-                    title: 'Variants',
-                    render: (row: CachedProductRow) => <Text size="small">{row.variantCount}</Text>,
-                    width: '50px',
-                  },
-                  {
-                    title: 'Description',
-                    render: (row: CachedProductRow) => {
-                      const raw = row.plainDescription ?? row.description ?? '';
-                      const plain = raw.replace(/<[^>]*>/g, '').trim() || '—';
-                      return (
-                        <Text size="tiny" secondary style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-                          {plain}
-                        </Text>
-                      );
-                    },
-                    width: '18%',
-                  },
-                  {
-                    title: 'AI Description',
-                    render: (row: CachedProductRow) => (
-                      <Text size="tiny" skin={row.enhancedDescription ? 'success' : 'disabled'} style={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } as any}>
-                        {row.enhancedDescription ?? '—'}
-                      </Text>
-                    ),
-                    width: '18%',
-                  },
-                  {
-                    title: 'Platforms',
-                    render: (row: CachedProductRow) => {
-                      const platforms = productPlatforms.get(row.productId) ?? ['gmc', 'meta'];
-                      return (
-                        <Box direction="horizontal" gap="4px">
-                          <Badge
-                            size="small"
-                            skin={platforms.includes('gmc') ? 'success' : 'neutral'}
-                            onClick={() => handlePlatformToggle([row.productId], 'gmc', !platforms.includes('gmc'))}
-                          >
-                            GMC
-                          </Badge>
-                          <Badge
-                            size="small"
-                            skin={platforms.includes('meta') ? 'success' : 'neutral'}
-                            onClick={() => handlePlatformToggle([row.productId], 'meta', !platforms.includes('meta'))}
-                          >
-                            Meta
-                          </Badge>
-                        </Box>
-                      );
-                    },
-                    width: '120px',
-                  },
-                  {
-                    title: 'Overrides',
-                    render: (row: CachedProductRow) => {
-                      const count = overrideCounts.get(row.productId);
-                      if (!count) return <Text size="tiny" secondary>—</Text>;
-                      const details = overrideDetails.get(row.productId) ?? {};
-                      const isOpen = openOverridePopover === row.productId;
-                      return (
-                        <Popover
-                          shown={isOpen}
-                          onClickOutside={() => setOpenOverridePopover(null)}
-                          placement="left"
-                        >
-                          <Popover.Element>
-                            <Badge
-                              size="small"
-                              skin="warning"
-                              onClick={() => setOpenOverridePopover(isOpen ? null : row.productId)}
-                            >
-                              {count} override{count > 1 ? 's' : ''}
-                            </Badge>
-                          </Popover.Element>
-                          <Popover.Content>
-                            <Box direction="vertical" gap="8px" padding="12px" style={{ minWidth: 200 }}>
-                              <Text size="small" weight="bold">GMC Field Overrides</Text>
-                              {Object.entries(details).map(([field, value]) => (
-                                <Box key={field} direction="horizontal" gap="8px" verticalAlign="middle">
-                                  <Text size="tiny" weight="bold" style={{ minWidth: 70 }}>{field}:</Text>
-                                  <Text size="tiny" style={{ flex: 1 }}>{value}</Text>
-                                  <Button
-                                    size="tiny"
-                                    skin="destructive"
-                                    priority="secondary"
-                                    onClick={async () => {
-                                      await appFetch('/api/gmc-overrides', {
-                                        method: 'DELETE',
-                                        headers: { 'Content-Type': 'application/json' },
-                                        body: JSON.stringify({ productId: row.productId, field }),
-                                      });
-                                      await loadOverrideCounts();
-                                    }}
-                                  >
-                                    Clear
-                                  </Button>
-                                </Box>
-                              ))}
-                            </Box>
-                          </Popover.Content>
-                        </Popover>
-                      );
-                    },
-                    width: '110px',
-                  },
-                  {
-                    title: 'Sync',
-                    render: (row: CachedProductRow) => {
-                      if (!row.syncStatus) return <Text size="tiny" secondary>—</Text>;
-                      const { status, errorMessages } = row.syncStatus;
-                      const skin = status === 'synced' ? 'success' : status === 'error' ? 'danger' : 'warning';
-                      if (status !== 'error' || !errorMessages?.length) {
-                        return <Badge size="small" skin={skin}>{status}</Badge>;
-                      }
-                      return <SyncErrorBadge status={status} errorMessages={errorMessages} />;
-                    },
-                    width: '70px',
-                  },
-                  {
-                    title: '',
-                    render: (row: CachedProductRow) => (
-                      <Button size="tiny" skin="light" onClick={() => handleEnhanceOne(row.productId)} disabled={enhancing === row.productId}>
-                        {enhancing === row.productId ? '...' : 'AI'}
-                      </Button>
-                    ),
-                    width: '50px',
-                  },
-                ]}
-              >
-                <TableToolbar>
-                  <TableToolbar.Title>
-                    {filteredProducts.length} products{activeFilter ? ' (filtered)' : ''}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
-                  </TableToolbar.Title>
-                  {selected.size > 0 && (
-                    <TableToolbar.Item>
-                      <Dropdown
-                        size="small"
-                        placeholder="Set platforms..."
-                        options={[
-                          { id: 'all', value: 'All platforms' },
-                          { id: 'gmc', value: 'GMC only' },
-                          { id: 'meta', value: 'Meta only' },
-                        ]}
-                        onSelect={(option: any) => {
-                          const ids = Array.from(selected);
-                          const platforms: ('gmc' | 'meta')[] | null = option.id === 'all' ? null
-                            : option.id === 'gmc' ? ['gmc']
-                            : ['meta'];
-                          // Update all selected products
-                          ids.forEach((id) => {
-                            const enabled = platforms === null || platforms.includes('gmc');
-                            handlePlatformToggle([id], 'gmc', enabled);
-                          });
-                        }}
-                      />
-                    </TableToolbar.Item>
-                  )}
-                </TableToolbar>
-                <Table.Content />
-              </Table>
-            </Card>
-          )}
-        </Box>
-      )}
-
-      {productsSubTab === 'compliance' && (
-        <Box direction="vertical" gap="18px">
-          {/* Check Compliance toolbar */}
-          <Box gap="12px" verticalAlign="middle">
-            <Button size="small" onClick={handleComplianceCheck} disabled={complianceLoading}>
-              {complianceLoading ? 'Checking...' : 'Check Compliance'}
-            </Button>
-            {compliance && (
-              <Text size="tiny" secondary>
-                Last checked: {compliance.totalProducts} products
-              </Text>
-            )}
-          </Box>
-
-          {compliance ? (
-            <Card>
-              <Card.Header title="Feed Health" suffix={
-                <Badge skin={compliance.healthScore >= 90 ? 'success' : compliance.healthScore >= 70 ? 'warning' : 'danger'}>
-                  {compliance.healthScore}%
-                </Badge>
-              } />
-              <Card.Content>
-                <Box direction="vertical" gap="12px">
-                  <Box direction="horizontal" gap="24px">
-                    <Text size="small">{compliance.compliantCount} compliant</Text>
-                    <Text size="small" skin="standard">{compliance.warningCount} warnings</Text>
-                    <Text size="small" skin="error">{compliance.errorCount} errors</Text>
-                    <Text size="small" secondary>of {compliance.totalProducts} products</Text>
-                  </Box>
-                  {compliance.results.filter((r) => r.errors.length > 0 || r.warnings.length > 0).map((r) => {
-                    const product = filteredProducts.find((p) => p.productId === r.productId);
-                    const isExpanded = expandedCompliance === r.offerId;
-                    const fixes = pendingFixes.get(r.offerId);
-                    const allIssues = [...r.errors, ...r.warnings];
-                    return (
-                      <div key={r.offerId} style={{ background: r.compliant ? '#f0fdf4' : '#fef2f2', borderRadius: 6, padding: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <div onClick={() => setExpandedCompliance(isExpanded ? null : r.offerId)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <Badge size="small" skin={r.compliant ? 'warning' : 'danger'}>
-                            {r.errors.length > 0 ? `${r.errors.length} error${r.errors.length > 1 ? 's' : ''}` : `${r.warnings.length} warning${r.warnings.length > 1 ? 's' : ''}`}
-                          </Badge>
-                          <Text size="small" weight="bold">{product?.name ?? r.productId.slice(0, 12)}</Text>
-                          <Text size="tiny" secondary>ID: {r.offerId}</Text>
-                          {fixes && fixes.size > 0 && (
-                            <Badge size="small" skin="success">{fixes.size} fix{fixes.size > 1 ? 'es' : ''} staged</Badge>
-                          )}
-                          <Text size="tiny" secondary>{isExpanded ? '▾' : '▸'}</Text>
-                        </div>
-                        {isExpanded && (
-                          <div style={{ paddingLeft: 12, marginTop: 4, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            {allIssues.map((issue, i) => {
-                              const fixKey = `${r.offerId}:${issue.field}`;
-                              const isEditing = editingFix === fixKey;
-                              const hasFix = fixes?.has(issue.field);
-                              const fixable = ['brand', 'description', 'title', 'condition', 'link', 'imageLink', 'offerId'].includes(issue.field);
-                              return (
-                                <div key={`issue${i}`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                    <Text size="tiny" skin={issue.severity === 'error' ? 'error' : undefined}>
-                                      {issue.severity === 'warning' ? '⚠' : '✗'} {issue.field}: {issue.message}
-                                    </Text>
-                                    {hasFix && (
-                                      <Badge size="small" skin="success">Fixed: {fixes!.get(issue.field)!.slice(0, 30)}{fixes!.get(issue.field)!.length > 30 ? '...' : ''}</Badge>
-                                    )}
-                                    {fixable && !isEditing && !hasFix && (
-                                      <Box direction="horizontal" gap="6px">
-                                        <button
-                                          onClick={(e) => { e.stopPropagation(); setEditingFix(fixKey); setEditingFixValue(''); }}
-                                          style={{ border: '1px solid #3b82f6', background: '#eff6ff', color: '#3b82f6', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', fontSize: 11, fontWeight: 600 }}
-                                        >
-                                          Fix
-                                        </button>
-                                        {(issue.field === 'description' || issue.field === 'title') && _config?.aiEnhancementEnabled && (
-                                          <button
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              handleFixWithAi(r.offerId, r.productId, issue.field as 'description' | 'title');
-                                            }}
-                                            disabled={aiFixLoading.has(fixKey)}
-                                            style={{ border: '1px solid #8b5cf6', background: '#f5f3ff', color: '#7c3aed', borderRadius: 4, padding: '2px 8px', cursor: aiFixLoading.has(fixKey) ? 'wait' : 'pointer', fontSize: 11, fontWeight: 600 }}
-                                          >
-                                            {aiFixLoading.has(fixKey) ? '...' : 'Fix with AI'}
-                                          </button>
-                                        )}
-                                      </Box>
-                                    )}
-                                    {hasFix && (
-                                      <button onClick={(e) => { e.stopPropagation(); handleStageFix(r.offerId, issue.field, ''); }} style={{ border: '1px solid #9ca3af', background: 'transparent', color: '#9ca3af', borderRadius: 4, padding: '2px 6px', cursor: 'pointer', fontSize: 11 }}>
-                                        Undo
-                                      </button>
-                                    )}
-                                  </div>
-                                  {isEditing && (
-                                    <div onClick={(e) => e.stopPropagation()} style={{ display: 'flex', gap: 6, alignItems: 'center', paddingLeft: 16 }}>
-                                      <Input size="small" placeholder={`Enter ${issue.field} value...`} value={editingFixValue} onChange={(e: any) => setEditingFixValue(e.target.value)} />
-                                      <Button size="tiny" onClick={() => handleStageFix(r.offerId, issue.field, editingFixValue)} disabled={!editingFixValue.trim()}>
-                                        Stage
-                                      </Button>
-                                      <Button size="tiny" skin="light" onClick={() => { setEditingFix(null); setEditingFixValue(''); }}>
-                                        Cancel
-                                      </Button>
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </Box>
-              </Card.Content>
-            </Card>
-          ) : (
-            <Card>
-              <Card.Content>
-                <Box direction="vertical" align="center" padding="48px" gap="12px">
-                  <Text weight="bold">No compliance data</Text>
-                  <Text size="small" secondary>Click &quot;Check Compliance&quot; to validate your catalog against GMC requirements.</Text>
-                </Box>
-              </Card.Content>
-            </Card>
-          )}
-        </Box>
-      )}
-
-      {productsSubTab === 'ai' && (
-        <Box direction="vertical" gap="18px">
-          {/* AI Enhancement Settings */}
-          <Card>
-            <Card.Header
-              title="AI Enhancement Settings"
-              subtitle="Customize how Claude writes descriptions for your products"
-            />
-            <Card.Divider />
-            <Card.Content>
-              <Box direction="vertical" gap="12px">
-                <Box verticalAlign="middle" gap="12px">
-                  <ToggleSwitch
-                    size="small"
-                    checked={_config?.aiEnhancementEnabled ?? false}
-                    onChange={async () => {
-                      const newVal = !(_config?.aiEnhancementEnabled ?? false);
-                      try {
-                        await saveAppConfig({ aiEnhancementEnabled: newVal });
-                        await _onConfigRefresh();
-                      } catch (err) {
-                        setError(err instanceof Error ? err.message : 'Failed to update AI enhancement setting');
-                      }
-                    }}
-                  />
-                  <Text size="small">{_config?.aiEnhancementEnabled ? 'AI Enhancement Enabled' : 'AI Enhancement Disabled'}</Text>
-                </Box>
-                <FormField label="Style / Tone (optional)" infoContent="Describe the tone you want. e.g. 'professional and concise' or 'friendly and casual'">
-                  <Input
-                    size="small"
-                    value={aiStyle}
-                    onChange={(e) => setAiStyle(e.target.value)}
-                    onBlur={() => handleSaveAiStyle(aiStyle)}
-                    placeholder="e.g., professional and concise"
-                    disabled={savingAiStyle}
-                  />
-                </FormField>
-              </Box>
-            </Card.Content>
-          </Card>
-
-          {/* AI toolbar */}
-          <Box gap="12px" verticalAlign="middle">
-            <Button size="small" onClick={handleEnhanceAndPreview} disabled={aiPreviewLoading || filteredProducts.length === 0}>
-              {aiPreviewLoading
-                ? 'Generating...'
-                : selected.size > 0
-                  ? `Enhance Selected (${selected.size})`
-                  : 'Enhance All'}
-            </Button>
-          </Box>
-
-          {aiPreviews ? (
-            <Card>
-              <Card.Header
-                title="AI Enhancement Preview"
-                subtitle={`${aiPreviews.filter((p) => p.accepted).length} of ${aiPreviews.length} selected for update`}
-                suffix={
-                  <Box gap="12px">
-                    <Button size="small" priority="secondary" onClick={() => setAiPreviews(null)}>
-                      Cancel
-                    </Button>
-                    <Button size="small" skin="dark" onClick={handleApplyToStore} disabled={aiApplying}>
-                      {aiApplying ? 'Applying...' : 'Apply to Store'}
-                    </Button>
-                  </Box>
-                }
-              />
-              <Card.Divider />
-              <Card.Content>
-                <Box direction="vertical" gap="12px" maxHeight="80vh" overflowY="auto">
-                  {aiPreviews.map((preview) => (
-                    <Card key={preview.productId}>
-                      <Card.Content>
-                        <Box gap="12px" verticalAlign="top">
-                          <Box width="30px">
-                            <ToggleSwitch
-                              size="small"
-                              checked={preview.accepted}
-                              onChange={() => {
-                                setAiPreviews((prev) =>
-                                  prev?.map((p) =>
-                                    p.productId === preview.productId
-                                      ? { ...p, accepted: !p.accepted }
-                                      : p,
-                                  ) ?? null,
-                                );
-                              }}
-                            />
-                          </Box>
-                          <Box direction="vertical" gap="6px" width="100%">
-                            <Box gap="12px">
-                              <Box direction="vertical" width="50%">
-                                <Text size="small" weight="bold" secondary>Original Title</Text>
-                                <Text size="small">{preview.original.title}</Text>
-                              </Box>
-                              <Box direction="vertical" width="50%">
-                                <Text size="small" weight="bold" skin="success">Enhanced Title</Text>
-                                <Text size="small">{preview.enhanced?.title ?? '—'}</Text>
-                              </Box>
-                            </Box>
-                            <Box gap="12px">
-                              <Box direction="vertical" width="50%">
-                                <Text size="small" weight="bold" secondary>Original Description</Text>
-                                <Text size="small">{preview.original.description ?? ''}</Text>
-                              </Box>
-                              <Box direction="vertical" width="50%">
-                                <Text size="small" weight="bold" skin="success">Enhanced Description</Text>
-                                <Text size="small">{preview.enhanced?.description ?? ''}</Text>
-                              </Box>
-                            </Box>
-                          </Box>
-                        </Box>
-                      </Card.Content>
-                    </Card>
-                  ))}
-                </Box>
-              </Card.Content>
-            </Card>
-          ) : (
-            <Card>
-              <Card.Content>
-                <Box direction="vertical" align="center" padding="48px" gap="12px">
-                  <Text weight="bold">No AI previews</Text>
-                  <Text size="small" secondary>Click &quot;Enhance Selected&quot; or &quot;Enhance All&quot; to generate AI-enhanced titles and descriptions.</Text>
-                </Box>
-              </Card.Content>
-            </Card>
-          )}
-        </Box>
-      )}
-      </Box>
-    </Box>
+    <ProductsTabComponent
+      products={products}
+      loading={loading}
+      config={config}
+      onSyncNow={handleSyncNow}
+      onCheckCompliance={handleCheckCompliance}
+      onApplyFix={handleApplyFix}
+      onToggleAI={handleToggleAI}
+      onEnhanceNow={handleEnhanceNow}
+      initialFilter={initialFilter}
+    />
   );
 };
 
 // ─── Dashboard Tab (formerly Status Tab) ────────────────────────────────
 
-const SyncErrorBadge: FC<{ status: string; errorMessages: string[] }> = ({ status, errorMessages }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <Popover shown={open} onClickOutside={() => setOpen(false)} placement="left">
-      <Popover.Element>
-        <Badge size="small" skin="danger" onClick={() => setOpen((v) => !v)} style={{ cursor: 'pointer' }}>
-          {status} ▾
-        </Badge>
-      </Popover.Element>
-      <Popover.Content>
-        <Box direction="vertical" gap="8px" padding="12px" style={{ maxWidth: 340 }}>
-          <Text size="small" weight="bold">Why did this fail?</Text>
-          {errorMessages.map((msg, i) => (
-            <Text key={i} size="tiny">{msg}</Text>
-          ))}
-        </Box>
-      </Popover.Content>
-    </Popover>
-  );
-};
-
-const ErrorCell: FC<{ row: SyncRecord }> = ({ row }) => {
-  const [open, setOpen] = useState(false);
-  if (row.errorCount === 0) return <Text size="small">0</Text>;
-  return (
-    <Popover
-      shown={open}
-      onClickOutside={() => setOpen(false)}
-      placement="left"
-    >
-      <Popover.Element>
-        <Text
-          size="small"
-          skin="error"
-          style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {row.errorCount} error{row.errorCount !== 1 ? 's' : ''}
-        </Text>
-      </Popover.Element>
-      <Popover.Content>
-        <Box direction="vertical" gap="8px" padding="12px" style={{ maxWidth: 340 }}>
-          <Text size="small" weight="bold">Sync errors</Text>
-          {row.errorMessages.map((msg, i) => (
-            <Text key={i} size="tiny">{msg}</Text>
-          ))}
-        </Box>
-      </Popover.Content>
-    </Popover>
-  );
-};
-
-const statusColumns = [
-  {
-    title: 'Product ID',
-    render: (row: SyncRecord) => (
-      <Text size="small" secondary>{row.productId.slice(0, 8)}...</Text>
-    ),
-    width: '25%',
-  },
-  {
-    title: 'Platform',
-    render: (row: SyncRecord) => (
-      <Badge size="small" skin="general">{row.platform.toUpperCase()}</Badge>
-    ),
-    width: '15%',
-  },
-  {
-    title: 'Status',
-    render: (row: SyncRecord) => {
-      const skin = row.status === 'synced' ? 'success' : row.status === 'error' ? 'danger' : 'warning';
-      return <Badge size="small" skin={skin}>{row.status}</Badge>;
-    },
-    width: '15%',
-  },
-  {
-    title: 'Last Synced',
-    render: (row: SyncRecord) => (
-      <Text size="small">{new Date(row.lastSynced).toLocaleString()}</Text>
-    ),
-    width: '25%',
-  },
-  {
-    title: 'Errors',
-    render: (row: SyncRecord) => <ErrorCell row={row} />,
-    width: '10%',
-  },
-];
 
 type DashboardViewState = 'fresh' | 'confirm-setup' | 'setup-mode' | 'normal';
 
@@ -2318,7 +1272,6 @@ const DashboardTab: FC<{
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [syncResult, setSyncResult] = useState<string | null>(null);
   const [syncProgress, setSyncProgress] = useState<{
     totalProducts: number;
     processed: number;
@@ -2327,12 +1280,17 @@ const DashboardTab: FC<{
     failedCount: number;
   } | null>(null);
   const [wizardActive, setWizardActive] = useState(false);
+  const [recentEvents, setRecentEvents] = useState<SyncEvent[]>([]);
 
   const loadData = useCallback(async () => {
     try {
       setError(null);
-      const result = await fetchSyncStatus();
-      setData(result);
+      const [statusResult, eventsResult] = await Promise.all([
+        fetchSyncStatus(),
+        fetchSyncEvents(),
+      ]);
+      setData(statusResult);
+      setRecentEvents(eventsResult);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load');
     } finally {
@@ -2359,15 +1317,11 @@ const DashboardTab: FC<{
 
   const handleSync = useCallback(async () => {
     setSyncing(true);
-    setSyncResult(null);
     setError(null);
     pollProgress();
     try {
-      const result = await triggerSync();
+      await triggerSync();
       setSyncProgress(null);
-      setSyncResult(
-        `Sync complete: ${result.synced} synced, ${result.failed} failed out of ${result.total} total`,
-      );
       await loadData();
     } catch (err) {
       setSyncProgress(null);
@@ -2388,6 +1342,13 @@ const DashboardTab: FC<{
     onRefresh();
     onTabChange('mapping');
   }, [onRefresh, onTabChange]);
+
+  const handleCheckCompliance = useCallback(async () => {
+    try {
+      await appFetch('/api/compliance-check?instanceId=default');
+      await loadData();
+    } catch { /* silent */ }
+  }, [loadData]);
 
   if (loading) {
     return (
@@ -2445,72 +1406,51 @@ const DashboardTab: FC<{
     );
   }
 
-  // normal state — existing JSX below unchanged
-  return (
-    <Box direction="vertical" gap="24px">
-      {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
-      {syncResult && <SectionHelper appearance="success">{syncResult}</SectionHelper>}
+  // Normal state: new design
+  const stats: DashboardStats = {
+    total: (data?.totalSynced ?? 0) + (data?.totalErrors ?? 0) + (data?.totalPending ?? 0),
+    synced: data?.totalSynced ?? 0,
+    failed: data?.totalErrors ?? 0,
+    warnings: (data as SyncStatusData | null)?.totalWarnings ?? 0,
+    lastFullSync: data?.lastFullSync ?? null,
+  };
 
-      <Box direction="vertical">
-        <Button onClick={handleSync} disabled={syncing} size="small">
-          {syncing ? 'Syncing...' : 'Sync Now'}
-        </Button>
-        {syncProgress && syncProgress.currentStatus === 'running' && (
-          <Box direction="vertical" gap="6px" marginTop="12px">
-            <Box gap="6px" verticalAlign="middle">
-              <Loader size="tiny" />
-              <Text size="small">
-                Syncing: {syncProgress.processed} / {syncProgress.totalProducts} products
-              </Text>
-            </Box>
-            <Box
-              height="8px"
-              backgroundColor="#E8E8E8"
-              borderRadius="4px"
-              overflow="hidden"
-            >
-              <Box
-                height="100%"
-                width={`${syncProgress.totalProducts > 0
-                  ? Math.round((syncProgress.processed / syncProgress.totalProducts) * 100)
-                  : 0}%`}
-                backgroundColor="#3B82F6"
-                borderRadius="4px"
-              />
-            </Box>
-            <Text size="tiny" secondary>
-              {syncProgress.syncedCount} synced, {syncProgress.failedCount} failed
+  const defaultHealth: PlatformHealth = { connected: false, total: 0, synced: 0, errors: 0, pct: 0 };
+
+  return (
+    <Box direction="vertical" gap="16px">
+      {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
+      {syncProgress && syncProgress.currentStatus === 'running' && (
+        <Box direction="vertical" gap="6px">
+          <Box gap="6px" verticalAlign="middle">
+            <Loader size="tiny" />
+            <Text size="small">
+              Syncing: {syncProgress.processed} / {syncProgress.totalProducts} products
             </Text>
           </Box>
-        )}
-      </Box>
-
-      <Box gap="12px">
-        <Card>
-          <Card.Header title={String(data?.totalSynced ?? 0)} subtitle="Synced" />
-        </Card>
-        <Card>
-          <Card.Header title={String(data?.totalErrors ?? 0)} subtitle="Errors" />
-        </Card>
-        <Card>
-          <Card.Header title={String(data?.totalPending ?? 0)} subtitle="Pending" />
-        </Card>
-        <Card>
-          <Card.Header
-            title={data?.lastFullSync ? new Date(data.lastFullSync).toLocaleDateString() : 'Never'}
-            subtitle="Last Full Sync"
-          />
-        </Card>
-      </Box>
-
-      <Card>
-        <Table data={data?.records ?? []} columns={statusColumns}>
-          <TableToolbar>
-            <TableToolbar.Title>Sync Records ({data?.records?.length ?? 0})</TableToolbar.Title>
-          </TableToolbar>
-          <Table.Content />
-        </Table>
-      </Card>
+          <Box height="8px" backgroundColor="#E8E8E8" borderRadius="4px" overflow="hidden">
+            <Box
+              height="100%"
+              width={`${syncProgress.totalProducts > 0 ? Math.round((syncProgress.processed / syncProgress.totalProducts) * 100) : 0}%`}
+              backgroundColor="#3B82F6"
+              borderRadius="4px"
+            />
+          </Box>
+        </Box>
+      )}
+      <DashboardTabNormal
+        stats={stats}
+        platformHealth={{
+          gmc: (data as SyncStatusData | null)?.platformHealth?.gmc ?? defaultHealth,
+          meta: (data as SyncStatusData | null)?.platformHealth?.meta ?? defaultHealth,
+        }}
+        topIssues={(data as SyncStatusData | null)?.topIssues ?? { gmc: [], meta: [] }}
+        recentEvents={recentEvents}
+        syncing={syncing}
+        onSyncNow={handleSync}
+        onCheckCompliance={handleCheckCompliance}
+        onNavigateToFailed={() => onTabChange('products-failed')}
+      />
     </Box>
   );
 };
@@ -2758,6 +1698,7 @@ const SyncStreamPage: FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [config, setConfig] = useState<AppConfigData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [productsFilter, setProductsFilter] = useState<'all' | 'failed' | 'warnings' | 'synced'>('all');
 
   const loadConfig = useCallback(async () => {
     try {
@@ -2829,8 +1770,27 @@ const SyncStreamPage: FC = () => {
             {activeTab === 'connect' && (
               <ConnectTab config={config} onRefresh={loadConfig} onTabChange={setActiveTab} />
             )}
-            {activeTab === 'dashboard' && <DashboardTab config={config} onRefresh={loadConfig} onTabChange={setActiveTab} />}
-            {activeTab === 'products' && <ProductsTab config={config} onConfigRefresh={loadConfig} />}
+            {activeTab === 'dashboard' && (
+              <DashboardTab
+                config={config}
+                onRefresh={loadConfig}
+                onTabChange={(tab) => {
+                  if (tab === 'products-failed') {
+                    setProductsFilter('failed');
+                    setActiveTab('products');
+                  } else {
+                    setActiveTab(tab);
+                  }
+                }}
+              />
+            )}
+            {activeTab === 'products' && (
+              <ProductsTab
+                config={config}
+                onConfigRefresh={loadConfig}
+                initialFilter={productsFilter}
+              />
+            )}
             {activeTab === 'mapping' && <MappingTab config={config} />}
             {activeTab === 'settings' && <SettingsTab config={config} onRefresh={loadConfig} />}
           </Box>
