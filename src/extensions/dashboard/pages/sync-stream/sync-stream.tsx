@@ -47,9 +47,6 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
 
 const CHANGELOG_URL = 'https://syncstream.app/changelog';
 
-// Module-level flag for pending compliance fixes (read by tab change handler)
-let _hasPendingFixes = false;
-
 // ─── Shared types & API helpers ──────────────────────────────────────────
 
 interface FieldMapping {
@@ -552,11 +549,6 @@ const MAPPING_SUB_TABS = [
   { id: 'filters', title: 'Filters' },
 ];
 
-const PRODUCTS_SUB_TABS = [
-  { id: 'products', title: 'Products' },
-  { id: 'compliance', title: 'Compliance' },
-  { id: 'ai', title: 'AI' },
-];
 
 interface SyncRule {
   id?: string;
@@ -967,59 +959,6 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
 };
 
 // ─── Products Tab (Workbench) ────────────────────────────────────────────
-
-interface CachedProductRow {
-  productId: string;
-  name: string;
-  imageUrl?: string;
-  price?: string;
-  currency: string;
-  availability?: string;
-  variantCount: number;
-  description?: string;
-  plainDescription?: string;
-  brand?: string;
-  syncStatus: { status: string; lastSynced: string; errorMessages: string[] } | null;
-  enhancedDescription: string | null;
-  enhancedTitle: string | null;
-}
-
-const FILTER_FIELD_OPTIONS = [
-  { id: 'name', value: 'Name' },
-  { id: 'price', value: 'Price' },
-  { id: 'availability', value: 'Availability' },
-  { id: 'brand', value: 'Brand' },
-  { id: 'variantCount', value: 'Variants' },
-];
-
-const FILTER_OP_OPTIONS = [
-  { id: 'equals', value: 'Equals' },
-  { id: 'not_equals', value: 'Not Equals' },
-  { id: 'contains', value: 'Contains' },
-  { id: 'greater_than', value: 'Greater Than' },
-  { id: 'less_than', value: 'Less Than' },
-];
-
-function applyClientFilter(
-  products: CachedProductRow[],
-  field: string,
-  operator: string,
-  value: string,
-): CachedProductRow[] {
-  return products.filter((p) => {
-    const fieldValue = String((p as any)[field] ?? '');
-    const numField = Number(fieldValue);
-    const numValue = Number(value);
-    switch (operator) {
-      case 'equals': return fieldValue === value;
-      case 'not_equals': return fieldValue !== value;
-      case 'contains': return fieldValue.toLowerCase().includes(value.toLowerCase());
-      case 'greater_than': return !isNaN(numField) && !isNaN(numValue) && numField > numValue;
-      case 'less_than': return !isNaN(numField) && !isNaN(numValue) && numField < numValue;
-      default: return true;
-    }
-  });
-}
 
 const ProductsTab: FC<{
   config: AppConfigData | null;
@@ -1759,9 +1698,6 @@ const SyncStreamPage: FC = () => {
               items={TAB_ITEMS}
               activeId={activeTab}
               onClick={(tab) => {
-                if (_hasPendingFixes && activeTab === 'products' && String(tab.id) !== 'products') {
-                  if (!window.confirm('You have uncommitted compliance fixes. Leave without applying them?')) return;
-                }
                 setActiveTab(String(tab.id));
               }}
               type="compactSide"
