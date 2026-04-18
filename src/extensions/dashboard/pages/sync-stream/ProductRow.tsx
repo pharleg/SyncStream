@@ -84,7 +84,9 @@ const ExpandedPanel: FC<{
   for (const field of uniqueFixableFields) {
     if (field === 'brand') initialValues[field] = product.brand ?? '';
     else if (field === 'description') initialValues[field] = product.description ?? '';
-    else if (field === 'title') initialValues[field] = product.name ?? '';
+    else if (field === 'title') initialValues[field] = product.name;
+    else if (field === 'imageLink') initialValues[field] = product.imageUrl ?? '';
+    else if (field === 'offerId') initialValues[field] = product.sku ?? '';
     else initialValues[field] = '';
   }
 
@@ -111,7 +113,7 @@ const ExpandedPanel: FC<{
   };
 
   return (
-    <div style={{ background: '#f7f9fb', borderTop: '1px solid #e8edf0', padding: '14px 14px 14px 58px', display: 'flex', gap: 24 }}>
+    <Box gap="24px" style={{ background: '#f7f9fb', borderTop: '1px solid #e8edf0', padding: '14px 14px 14px 58px' }}>
       {/* Column 1: Fix inputs */}
       <Box direction="vertical" style={{ flex: 1 }} gap="8px">
         <Text size="small" weight="bold">Fix Issues</Text>
@@ -175,7 +177,7 @@ const ExpandedPanel: FC<{
           <ToggleSwitch
             size="small"
             checked={product.aiEnabled}
-            onChange={(e) => onToggleAI(product.productId, e.target.checked)}
+            onChange={(e) => onToggleAI(product.productId, e.target.checked).catch(() => {})}
           />
           <Text size="small">{product.aiEnabled ? 'Auto-enhance on sync' : 'Enhancement off'}</Text>
         </Box>
@@ -190,7 +192,7 @@ const ExpandedPanel: FC<{
           {enhancing ? <Loader size="tiny" /> : '✦ Enhance This Product'}
         </Button>
       </Box>
-    </div>
+    </Box>
   );
 };
 
@@ -211,29 +213,24 @@ export const ProductRow: FC<ProductRowProps> = ({
       {/* Main row */}
       <div
         style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 8,
           padding: '10px 14px',
           borderBottom: '1px solid #f0f2f5',
           background: rowBackground(product),
           cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: 8,
         }}
         onClick={() => onExpand(isExpanded ? null : product.productId)}
       >
         {/* Thumbnail */}
-        <div
-          style={{
-            width: 32, height: 32, borderRadius: 4, flexShrink: 0, overflow: 'hidden',
-            background: '#e8edf0', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}
-        >
+        <Box align="center" verticalAlign="middle" style={{ width: 32, height: 32, borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: '#e8edf0' }}>
           {product.imageUrl ? (
             <img src={product.imageUrl} alt={product.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
           ) : (
             <Text size="tiny" secondary>—</Text>
           )}
-        </div>
+        </Box>
 
         {/* Product info + issues */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -243,9 +240,9 @@ export const ProductRow: FC<ProductRowProps> = ({
           </Text>
           {allIssues.length > 0 && (
             <div style={{ marginTop: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {allIssues.map((issue, i) => (
+              {allIssues.map((issue) => (
                 <Text
-                  key={i}
+                  key={`${issue.field}-${issue.severity}-${issue.message}`}
                   size="tiny"
                   style={{ color: issue.severity === 'error' ? '#c62828' : '#c17d00' }}
                 >
@@ -257,34 +254,34 @@ export const ProductRow: FC<ProductRowProps> = ({
         </div>
 
         {/* GMC status */}
-        <div style={{ width: 72, flexShrink: 0, paddingTop: 2 }}>
+        <Box style={{ width: 72, flexShrink: 0 }} verticalAlign="top" paddingTop="2px">
           <Text size="tiny" weight="bold" style={{ color: statusColor(product.gmcStatus) }}>
             {statusLabel(product.gmcStatus)}
           </Text>
-        </div>
+        </Box>
 
         {/* Meta status */}
-        <div style={{ width: 72, flexShrink: 0, paddingTop: 2 }}>
+        <Box style={{ width: 72, flexShrink: 0 }} verticalAlign="top" paddingTop="2px">
           <Text size="tiny" weight="bold" style={{ color: statusColor(product.metaStatus) }}>
             {statusLabel(product.metaStatus)}
           </Text>
-        </div>
+        </Box>
 
         {/* AI toggle */}
-        <div style={{ width: 80, flexShrink: 0, paddingTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Box gap="6px" verticalAlign="middle" style={{ width: 80, flexShrink: 0 }} paddingTop="2px">
           <ToggleSwitch
             size="small"
             checked={product.aiEnabled}
             onChange={(e) => {
               e.stopPropagation();
-              onToggleAI(product.productId, e.target.checked);
+              onToggleAI(product.productId, e.target.checked).catch(() => {});
             }}
           />
           <Text size="tiny" secondary>{product.aiEnabled ? 'Enhanced' : 'Off'}</Text>
-        </div>
+        </Box>
 
         {/* Action */}
-        <div style={{ width: 36, flexShrink: 0, paddingTop: 2 }}>
+        <Box style={{ width: 36, flexShrink: 0 }} verticalAlign="top" paddingTop="2px">
           <Text
             size="tiny"
             weight="bold"
@@ -292,12 +289,13 @@ export const ProductRow: FC<ProductRowProps> = ({
           >
             {hasErrors || hasWarnings ? 'Fix' : '›'}
           </Text>
-        </div>
+        </Box>
       </div>
 
       {/* Expanded panel */}
       {isExpanded && (
         <ExpandedPanel
+          key={product.productId}
           product={product}
           onApplyFix={onApplyFix}
           onToggleAI={onToggleAI}
