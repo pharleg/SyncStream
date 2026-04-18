@@ -1,5 +1,5 @@
 // src/extensions/dashboard/pages/sync-stream/ProductsTab.tsx
-import { type FC, useState, useMemo, useEffect } from 'react';
+import { type FC, type CSSProperties, useState, useMemo, useEffect } from 'react';
 import { Box, Text, Input, Button, Loader } from '@wix/design-system';
 import { ProductRow, type ProductRowData, type ApplyFixPayload } from './ProductRow';
 
@@ -78,16 +78,17 @@ export const ProductsTab: FC<ProductsTabProps> = ({
     try { await onCheckCompliance(); } finally { setChecking(false); }
   };
 
-  const filterTabStyle = (tab: FilterTab): React.CSSProperties => ({
+  const filterTabStyle = (tab: FilterTab): CSSProperties => ({
     padding: '6px 14px',
     borderRadius: 100,
     fontSize: 12,
     fontWeight: 600,
     cursor: 'pointer',
-    border: '1px solid',
-    borderColor: activeFilter === tab
-      ? (tab === 'failed' ? '#f5c6c6' : tab === 'warnings' ? '#f5d67a' : tab === 'synced' ? '#a5d6b0' : '#32536a')
-      : '#dfe5eb',
+    border: `1px solid ${
+      activeFilter === tab
+        ? (tab === 'failed' ? '#f5c6c6' : tab === 'warnings' ? '#f5d67a' : tab === 'synced' ? '#a5d6b0' : '#32536a')
+        : '#dfe5eb'
+    }`,
     background: activeFilter === tab
       ? (tab === 'failed' ? '#fce8e8' : tab === 'warnings' ? '#fff8e1' : tab === 'synced' ? '#e8f5ee' : '#32536a')
       : 'white',
@@ -110,13 +111,18 @@ export const ProductsTab: FC<ProductsTabProps> = ({
       <Box gap="8px" verticalAlign="middle" style={{ flexWrap: 'wrap' }}>
         <Box gap="6px">
           {(['all', 'failed', 'warnings', 'synced'] as FilterTab[]).map((tab) => (
-            <span
+            <button
               key={tab}
-              style={filterTabStyle(tab)}
+              type="button"
+              style={{
+                ...filterTabStyle(tab),
+                fontFamily: 'inherit',
+                outline: 'none',
+              }}
               onClick={() => setActiveFilter(tab)}
             >
               {tab.charAt(0).toUpperCase() + tab.slice(1)} ({counts[tab]})
-            </span>
+            </button>
           ))}
         </Box>
         <Box style={{ flex: 1, minWidth: 160 }}>
@@ -128,10 +134,10 @@ export const ProductsTab: FC<ProductsTabProps> = ({
           />
         </Box>
         <Button size="small" skin="light" onClick={handleCheckCompliance} disabled={checking}>
-          {checking ? <Loader size="tiny" /> : '⟳ Check All'}
+          {checking ? <Loader size="tiny" /> : 'Check All'}
         </Button>
         <Button size="small" onClick={handleSyncNow} disabled={syncing}>
-          {syncing ? <Loader size="tiny" /> : '⟳ Sync Now'}
+          {syncing ? <Loader size="tiny" /> : 'Sync Now'}
         </Button>
       </Box>
 
