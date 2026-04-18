@@ -244,9 +244,11 @@ export function mapFlattenedToGmc(
   const rawDesc = enhanced?.description ?? product.plainDescription ?? product.description ?? '';
   const description = truncate(stripHtml(rawDesc), 5000) || product.name;
   const title = enhanced?.title ?? product.name;
+  const storeName = resolveMappedField(product, 'storeName', mappings);
   const brand =
     product.brand?.name ??
     resolveMappedField(product, 'brand', mappings) ??
+    storeName ??
     '';
   const condition = (
     resolveMappedField(product, 'condition', mappings)?.toUpperCase() as
@@ -254,7 +256,13 @@ export function mapFlattenedToGmc(
       | undefined
   ) ?? 'NEW';
   const gtin = resolveMappedField(product, 'gtin', mappings);
-  const mpn = resolveMappedField(product, 'mpn', mappings);
+  const mpnMapped = resolveMappedField(product, 'mpn', mappings);
+  // Auto-generate a stable MPN from Wix product/variant IDs when none is mapped.
+  // parentId_variantId for multi-variant rows, parentId for single-variant.
+  const mpnGenerated = item.isMultiVariant
+    ? `${item.parentId}_${item.itemId}`
+    : item.parentId;
+  const mpn = mpnMapped ?? mpnGenerated;
   const googleProductCategory = resolveMappedField(product, 'googleProductCategory', mappings);
   const additionalImageLinks = getAdditionalImageLinks(product);
   const price = extractPrice(product, variant);
@@ -286,9 +294,16 @@ export function mapFlattenedToGmc(
     // They can be added via custom attributes in a future update
   }
 
-  if (gtin) productAttributes.gtins = [gtin];
-  if (mpn) productAttributes.mpn = mpn;
-  if (!gtin && !mpn) productAttributes.identifierExists = false;
+  if (gtin) {
+    productAttributes.gtins = [gtin];
+  } else {
+    // Always set MPN — either merchant-mapped or auto-generated from Wix product IDs.
+    // brand + mpn satisfies GMC identifier requirement without a GTIN.
+    productAttributes.mpn = mpn;
+    // Only declare identifierExists: false when brand is also absent — no brand means
+    // GMC can't match the product even with an MPN.
+    if (!brand) productAttributes.identifierExists = false;
+  }
   if (googleProductCategory) productAttributes.googleProductCategory = googleProductCategory;
   if (additionalImageLinks.length > 0) productAttributes.additionalImageLinks = additionalImageLinks;
 
@@ -319,9 +334,11 @@ export function mapToGmc(
 ): GmcProductInput[] {
   const rawDesc = product.plainDescription ?? product.description ?? '';
   const description = truncate(stripHtml(rawDesc), 5000) || product.name;
+  const storeName = resolveMappedField(product, 'storeName', mappings);
   const brand =
     product.brand?.name ??
     resolveMappedField(product, 'brand', mappings) ??
+    storeName ??
     '';
   const condition = (
     resolveMappedField(product, 'condition', mappings)?.toUpperCase() as
@@ -359,9 +376,15 @@ export function mapToGmc(
       condition,
     };
 
-    if (gtin) productAttributes.gtins = [gtin];
-    if (mpn) productAttributes.mpn = mpn;
-    if (!gtin && !mpn) productAttributes.identifierExists = false;
+    const productId = product._id ?? product.id;
+    const variantId = variant?._id ?? variant?.id;
+    const autoMpn = variantId && variantId !== productId ? `${productId}_${variantId}` : productId;
+    if (gtin) {
+      productAttributes.gtins = [gtin];
+    } else {
+      productAttributes.mpn = mpn ?? autoMpn;
+      if (!brand) productAttributes.identifierExists = false;
+    }
     if (googleProductCategory)
       productAttributes.googleProductCategory = googleProductCategory;
     if (additionalImageLinks.length > 0)
@@ -397,9 +420,15 @@ export function mapToGmc(
 
     if (color) productAttributes.color = color;
     if (size) productAttributes.size = size;
-    if (gtin) productAttributes.gtins = [gtin];
-    if (mpn) productAttributes.mpn = mpn;
-    if (!gtin && !mpn) productAttributes.identifierExists = false;
+    const parentId = product._id ?? product.id;
+    const vId = variant._id ?? variant.id;
+    const autoMpnV = `${parentId}_${vId}`;
+    if (gtin) {
+      productAttributes.gtins = [gtin];
+    } else {
+      productAttributes.mpn = mpn ?? autoMpnV;
+      if (!brand) productAttributes.identifierExists = false;
+    }
     if (googleProductCategory)
       productAttributes.googleProductCategory = googleProductCategory;
     if (additionalImageLinks.length > 0)

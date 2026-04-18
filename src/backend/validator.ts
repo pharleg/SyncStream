@@ -46,7 +46,6 @@ export function validateGmc(
     'description',
     'link',
     'imageLink',
-    'brand',
   ];
 
   for (const field of requiredAttrFields) {
@@ -56,6 +55,18 @@ export function validateGmc(
       productId,
     );
     if (err) errors.push(err);
+  }
+
+  // Brand: warning-level — MPN is auto-generated so GMC won't disapprove, but
+  // adding a real brand improves catalog matching and Shopping ad performance.
+  if (!attrs.brand || attrs.brand.trim().length === 0) {
+    errors.push({
+      field: 'brand',
+      platform: 'gmc',
+      message: 'No brand set — set a Store Name in Field Mapping to improve GMC catalog matching.',
+      productId,
+      severity: 'warning',
+    });
   }
 
   // offerId is on the root product, not productAttributes
