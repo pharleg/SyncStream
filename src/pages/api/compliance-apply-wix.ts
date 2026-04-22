@@ -5,7 +5,7 @@
  * All other fields (brand, condition, link, imageLink) are silently skipped —
  * those are GMC-only overrides handled by /api/compliance-apply-gmc.
  *
- * Body: { fixes: Array<{ productId: string; field: string; value: string }> }
+ * Body: { productId: string; fixes: Array<{ field: string; value: string }> }
  * Response: { applied: number; failed: number; results: Array<{ productId, success, error? }> }
  */
 import type { APIRoute } from 'astro';
@@ -17,29 +17,27 @@ const WIX_FIXABLE_FIELDS = new Set(['title', 'description']);
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const fixes: Array<{ productId: string; field: string; value: string }> = body.fixes ?? [];
+    const productId: string = body.productId;
+    const rawFixes: Array<{ field: string; value: string }> = body.fixes ?? [];
 
-    // Group by productId, keep only Wix-writable fields
-    const byProduct = new Map<string, { title?: string; description?: string }>();
-    for (const fix of fixes) {
+    const fields: { title?: string; description?: string } = {};
+    for (const fix of rawFixes) {
       if (!WIX_FIXABLE_FIELDS.has(fix.field)) continue;
-      const current = byProduct.get(fix.productId) ?? {};
-      if (fix.field === 'title') current.title = fix.value;
-      if (fix.field === 'description') current.description = fix.value;
-      byProduct.set(fix.productId, current);
+      if (fix.field === 'title') fields.title = fix.value;
+      if (fix.field === 'description') fields.description = fix.value;
     }
 
-    if (byProduct.size === 0) {
+    if (!productId || (!fields.title && !fields.description)) {
       return new Response(JSON.stringify({ applied: 0, failed: 0, results: [] }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const updates = Array.from(byProduct.entries()).map(([productId, fields]) => ({
+    const updates = [{
       productId,
       title: fields.title ?? '',
       description: fields.description ?? '',
-    })).filter((u) => u.title || u.description);
+    }].filter((u) => u.title || u.description);
 
     const wixResults = await applyEnhancementsToWix('default', updates);
 

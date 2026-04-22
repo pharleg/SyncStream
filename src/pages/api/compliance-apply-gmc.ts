@@ -5,7 +5,7 @@
  * triggers a targeted immediate sync for affected products so changes hit
  * GMC right away. Overrides persist and are applied on all future syncs.
  *
- * Body: { fixes: Array<{ productId: string; field: string; value: string }> }
+ * Body: { productId: string; fixes: Array<{ field: string; value: string }> }
  * Response: { stored: number; synced: number; failed: number }
  */
 import type { APIRoute } from 'astro';
@@ -17,33 +17,27 @@ const GMC_OVERRIDE_FIELDS = new Set(['brand', 'condition', 'link', 'imageLink'])
 export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
-    const fixes: Array<{ productId: string; field: string; value: string }> = body.fixes ?? [];
+    const productId: string = body.productId;
+    const rawFixes: Array<{ field: string; value: string }> = body.fixes ?? [];
 
-    // Group by productId, keep only GMC override fields
-    const byProduct = new Map<string, Record<string, string>>();
-    for (const fix of fixes) {
+    const overrides: Record<string, string> = {};
+    for (const fix of rawFixes) {
       if (!GMC_OVERRIDE_FIELDS.has(fix.field)) continue;
-      const current = byProduct.get(fix.productId) ?? {};
-      current[fix.field] = fix.value;
-      byProduct.set(fix.productId, current);
+      overrides[fix.field] = fix.value;
     }
 
-    if (byProduct.size === 0) {
+    if (!productId || Object.keys(overrides).length === 0) {
       return new Response(JSON.stringify({ stored: 0, synced: 0, failed: 0 }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    // Store overrides in DB
-    for (const [productId, overrides] of byProduct) {
-      await upsertGmcOverrides(productId, overrides);
-    }
+    await upsertGmcOverrides(productId, overrides);
 
-    const stored = byProduct.size;
+    const stored = 1;
 
-    // Trigger targeted sync for affected products
-    const productIds = Array.from(byProduct.keys());
-    const syncResult = await syncFromCache('default', productIds, ['gmc']);
+    // Trigger targeted sync for this product
+    const syncResult = await syncFromCache('default', [productId], ['gmc']);
 
     return new Response(JSON.stringify({
       stored,

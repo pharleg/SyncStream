@@ -1,48 +1,50 @@
 /**
  * GET /api/debug-sync
- * Returns the first product's mapped GMC output + config fieldMappings for debugging.
+ * Shows all cached products with their computed GMC offerIds.
+ * Flags any offerId > 50 chars so the culprit is easy to spot.
  */
 import type { APIRoute } from 'astro';
-import { getAppConfig } from '../../backend/dataService';
-import { mapToGmc } from '../../backend/productMapper';
+import { getAppConfig, getCachedProducts } from '../../backend/dataService';
+import { flattenVariants, mapFlattenedToGmc } from '../../backend/productMapper';
 import { validateGmc } from '../../backend/validator';
 import type { WixProduct } from '../../types/wix.types';
 
 export const GET: APIRoute = async () => {
   try {
-    const config = await getAppConfig('default');
+    const [config, cached] = await Promise.all([
+      getAppConfig('default'),
+      getCachedProducts('default'),
+    ]);
 
-    const { productsV3 } = await import('@wix/stores');
-    const response = await productsV3.queryProducts(
-      { cursorPaging: { limit: 1 } },
-      { fields: ['URL', 'CURRENCY', 'PLAIN_DESCRIPTION', 'MEDIA_ITEMS_INFO'] },
-    );
-    const firstQueryProduct = response.products?.[0];
-    if (!firstQueryProduct) {
-      return new Response(JSON.stringify({ error: 'No products' }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    const fullProduct = await productsV3.getProduct(
-      (firstQueryProduct as any)._id ?? (firstQueryProduct as any).id,
-      { fields: ['URL', 'CURRENCY', 'PLAIN_DESCRIPTION', 'MEDIA_ITEMS_INFO', 'VARIANT_OPTION_CHOICE_NAMES'] },
-    );
-
-    const product = fullProduct as unknown as WixProduct;
     const siteUrl = config?.fieldMappings?.['siteUrl']?.defaultValue ?? '';
-    const gmcProducts = mapToGmc(product, config?.fieldMappings ?? {}, siteUrl);
-    const firstGmc = gmcProducts[0];
-    const errors = firstGmc ? validateGmc(firstGmc, firstGmc.offerId) : [];
+    const mappings = config?.fieldMappings ?? {};
+
+    const rows = cached.flatMap((cp) => {
+      const product = cp.productData as WixProduct;
+      return flattenVariants(product).map((item) => {
+        const gmc = mapFlattenedToGmc(item, mappings, siteUrl);
+        const errors = validateGmc(gmc, gmc.offerId);
+        return {
+          productName: product.name,
+          productId: item.parentId,
+          variantId: item.itemId,
+          sku: item.sku ?? null,
+          isMultiVariant: item.isMultiVariant,
+          offerId: gmc.offerId,
+          offerIdLength: gmc.offerId.length,
+          tooLong: gmc.offerId.length > 50,
+          blockingErrors: errors.filter((e) => e.severity === 'error').map((e) => e.message),
+        };
+      });
+    });
+
+    const tooLong = rows.filter((r) => r.tooLong);
 
     return new Response(JSON.stringify({
-      fieldMappings: config?.fieldMappings,
-      fieldMappingsType: typeof config?.fieldMappings,
-      brandMapping: config?.fieldMappings?.brand,
-      productName: product.name,
-      productBrand: product.brand,
-      gmcProduct: firstGmc,
-      validationErrors: errors,
+      totalVariants: rows.length,
+      tooLongCount: tooLong.length,
+      tooLongProducts: tooLong,
+      allProducts: rows,
     }, null, 2), {
       headers: { 'Content-Type': 'application/json' },
     });

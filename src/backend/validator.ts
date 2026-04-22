@@ -73,6 +73,16 @@ export function validateGmc(
   const offerErr = requiredString(product.offerId, 'offerId', productId);
   if (offerErr) errors.push(offerErr);
 
+  if (product.offerId && product.offerId.length > 50) {
+    errors.push({
+      field: 'offerId',
+      platform: 'gmc',
+      message: `SKU/offerId is ${product.offerId.length} characters — GMC limit is 50. Shorten the SKU on this product.`,
+      productId,
+      severity: 'error',
+    });
+  }
+
   // SKU warning: hex-only fallback IDs suggest no merchant SKU was set.
   // Fallback format: 32 hex chars (single) or 24hex_24hex (multi-variant).
   if (product.offerId) {
