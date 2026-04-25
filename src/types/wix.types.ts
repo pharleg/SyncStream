@@ -104,6 +104,8 @@ export interface AppConfig {
   aiEnhancementStyle?: string;
   /** False until merchant completes the one-time setup confirmation screen. */
   setupScreenShown?: boolean;
+  /** Billing plan tier for this instance. */
+  planTier?: 'free' | 'pro';
 }
 
 /** Flexible field-mapping model.

@@ -50,6 +50,7 @@ export async function getAppConfig(
     aiEnhancementEnabled: data.ai_enhancement_enabled ?? false,
     aiEnhancementStyle: data.ai_enhancement_style ?? undefined,
     setupScreenShown: data.setup_screen_shown ?? false,
+    planTier: (data.plan_tier as 'free' | 'pro') ?? 'free',
   };
 }
 
@@ -71,6 +72,7 @@ export async function saveAppConfig(
         ai_enhancement_enabled: config.aiEnhancementEnabled ?? false,
         ai_enhancement_style: config.aiEnhancementStyle ?? null,
         setup_screen_shown: config.setupScreenShown ?? false,
+        plan_tier: config.planTier ?? 'free',
       },
       { onConflict: 'instance_id' },
     );
