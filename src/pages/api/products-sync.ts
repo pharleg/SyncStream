@@ -1,5 +1,6 @@
 import type { APIRoute } from 'astro';
 import { syncFromCache } from '../../backend/syncService';
+import { BillingError } from '../../backend/billingService';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -20,6 +21,12 @@ export const POST: APIRoute = async ({ request }) => {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
+    if (error instanceof BillingError) {
+      return new Response(JSON.stringify({ error: error.message, code: error.code }), {
+        status: 402,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { 'Content-Type': 'application/json' },

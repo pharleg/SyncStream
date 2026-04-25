@@ -22,6 +22,8 @@ import { applyRules } from './rulesEngine';
 import {
   getValidGmcTokens,
 } from './oauthService';
+import { checkSyncLimit, checkPlatformAccess } from './billingService';
+export { BillingError } from './billingService';
 import {
   bulkUpsertSyncStates,
   getCachedProducts,
@@ -147,6 +149,9 @@ async function syncProductChunk(
   products: WixProduct[],
   platforms: SyncOptions['platforms'],
 ): Promise<BatchSyncResult> {
+  // Billing gate: enforce Free plan product limit before doing any work
+  await checkSyncLimit(instanceId, products.length);
+
   const allProductIds = products.map((p) => p._id ?? p.id);
 
   // Single RPC call replaces: getAppConfig + getFilters + getRules +
@@ -168,6 +173,9 @@ async function syncProductChunk(
   const results: SyncResult[] = [];
 
   if (platforms.includes('gmc')) {
+    // Billing gate: Free plan can access GMC, Pro required for Meta
+    await checkPlatformAccess(instanceId, 'gmc');
+
     if (!config.gmcConnected) {
       throw new Error('GMC not connected. Please connect your account first.');
     }
@@ -274,6 +282,12 @@ async function syncProductChunk(
     }
   }
 
+  if (platforms.includes('meta')) {
+    // Billing gate: Meta sync requires Pro plan
+    await checkPlatformAccess(instanceId, 'meta');
+    // Meta push not yet implemented — gate is in place for when it is added
+  }
+
   // 7. Write SyncState records (deduplicate by productId+platform — multi-variant
   //    products produce one SyncResult per variant but one SyncState per product)
   const stateMap = new Map<string, SyncState>();
@@ -354,6 +368,9 @@ export async function syncFromCache(
   // Reconstruct WixProduct objects from cached product_data JSON
   const products: WixProduct[] = cachedProducts.map((cp) => cp.productData as WixProduct);
 
+  // Billing gate: enforce Free plan product limit before doing any work
+  await checkSyncLimit(instanceId, products.length);
+
   const allProductIds = products.map((p) => p._id ?? p.id);
   const ctx = await getSyncContext(instanceId, allProductIds, 'gmc');
   const { config, filters, rules, overridesMap, enhancedMap: rawEnhancedMap } = ctx;
@@ -372,6 +389,9 @@ export async function syncFromCache(
   const results: SyncResult[] = [];
 
   if (platforms.includes('gmc')) {
+    // Billing gate: Free plan can access GMC, Pro required for Meta
+    await checkPlatformAccess(instanceId, 'gmc');
+
     if (!config.gmcConnected) {
       throw new Error('GMC not connected. Please connect your account first.');
     }
@@ -459,6 +479,12 @@ export async function syncFromCache(
         }
       }
     }
+  }
+
+  if (platforms.includes('meta')) {
+    // Billing gate: Meta sync requires Pro plan
+    await checkPlatformAccess(instanceId, 'meta');
+    // Meta push not yet implemented — gate is in place for when it is added
   }
 
   const stateMap2 = new Map<string, SyncState>();
