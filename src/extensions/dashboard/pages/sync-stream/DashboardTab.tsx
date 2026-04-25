@@ -19,6 +19,12 @@ export interface PlatformHealth {
   pct: number;
 }
 
+interface BillingStatus {
+  plan: 'free' | 'pro';
+  creditsRemaining: number;
+  resetDate: string;
+}
+
 interface DashboardTabNormalProps {
   stats: DashboardStats;
   platformHealth: { gmc: PlatformHealth; meta: PlatformHealth };
@@ -28,6 +34,7 @@ interface DashboardTabNormalProps {
   onSyncNow: () => void;
   onCheckCompliance: () => void;
   onNavigateToFailed: () => void;
+  billingStatus: BillingStatus | null;
 }
 
 function relativeTime(iso: string): string {
@@ -58,6 +65,7 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
   onSyncNow,
   onCheckCompliance,
   onNavigateToFailed,
+  billingStatus,
 }) => {
   // Merge gmc + meta top issues, deduplicate by field+message, take top 6
   const allTopIssues = (() => {
@@ -81,6 +89,47 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
 
   return (
     <Box direction="vertical" gap="16px">
+      {billingStatus && (
+        <Box
+          verticalAlign="middle"
+          gap="12px"
+          style={{
+            padding: '8px 14px',
+            background: billingStatus.plan === 'pro' ? '#eaf4ff' : '#f7f9fb',
+            border: '1px solid #e8edf0',
+            borderRadius: 8,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              padding: '2px 8px',
+              borderRadius: 100,
+              background: billingStatus.plan === 'pro' ? '#116dff' : '#32536a',
+              color: 'white',
+              textTransform: 'uppercase' as const,
+              letterSpacing: 0.5,
+            }}
+          >
+            {billingStatus.plan === 'pro' ? 'Pro' : 'Free'}
+          </span>
+          <Text size="small" secondary style={{ flex: 1 }}>
+            AI credits: {billingStatus.creditsRemaining} remaining · resets{' '}
+            {new Date(billingStatus.resetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          </Text>
+          {billingStatus.plan === 'free' && (
+            <Button
+              size="tiny"
+              skin="light"
+              style={{ fontSize: 11 }}
+              onClick={() => window.open('https://manage.wix.com/app-market', '_blank')}
+            >
+              Upgrade to Pro
+            </Button>
+          )}
+        </Box>
+      )}
       {/* Stat cards */}
       <Box gap="12px">
         {[
