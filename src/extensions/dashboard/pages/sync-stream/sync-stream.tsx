@@ -69,6 +69,12 @@ interface AppConfigData {
   [key: string]: unknown;
 }
 
+interface BillingStatus {
+  plan: 'free' | 'pro';
+  creditsRemaining: number;
+  resetDate: string;
+}
+
 interface SyncRecord {
   productId: string;
   platform: string;
@@ -964,7 +970,8 @@ const ProductsTab: FC<{
   config: AppConfigData | null;
   onConfigRefresh: () => void;
   initialFilter?: 'all' | 'failed' | 'warnings' | 'synced';
-}> = ({ config, initialFilter = 'all' }) => {
+  billingStatus: BillingStatus | null;
+}> = ({ config, initialFilter = 'all', billingStatus }) => {
   const [products, setProducts] = useState<ProductRowData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -1070,6 +1077,7 @@ const ProductsTab: FC<{
       onToggleAI={handleToggleAI}
       onEnhanceNow={handleEnhanceNow}
       initialFilter={initialFilter}
+      billingStatus={billingStatus}
     />
   );
 };
@@ -1206,7 +1214,8 @@ const DashboardTab: FC<{
   config: AppConfigData | null;
   onRefresh: () => void;
   onTabChange: (tab: string) => void;
-}> = ({ config, onRefresh, onTabChange }) => {
+  billingStatus: BillingStatus | null;
+}> = ({ config, onRefresh, onTabChange, billingStatus }) => {
   const [data, setData] = useState<SyncSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -1389,6 +1398,7 @@ const DashboardTab: FC<{
         onSyncNow={handleSync}
         onCheckCompliance={handleCheckCompliance}
         onNavigateToFailed={() => onTabChange('products-failed')}
+        billingStatus={billingStatus}
       />
     </Box>
   );
@@ -1638,10 +1648,21 @@ const SyncStreamPage: FC = () => {
   const [config, setConfig] = useState<AppConfigData | null>(null);
   const [loading, setLoading] = useState(true);
   const [productsFilter, setProductsFilter] = useState<'all' | 'failed' | 'warnings' | 'synced'>('all');
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
 
   const loadConfig = useCallback(async () => {
     try {
-      const data = await fetchAppConfig();
+      const [configRes, billingRes] = await Promise.all([
+        appFetch('/api/app-config?instanceId=default'),
+        appFetch('/api/billing-status?instanceId=default'),
+      ]);
+
+      const data: AppConfigData | null = configRes.ok ? await configRes.json() : null;
+
+      if (billingRes.ok) {
+        const billing = await billingRes.json() as BillingStatus;
+        setBillingStatus(billing);
+      }
 
       // Auto-populate siteUrl from Wix dashboard if not set
       const siteInfo = dashboard.getSiteInfo();
@@ -1722,6 +1743,7 @@ const SyncStreamPage: FC = () => {
                     setActiveTab(tab);
                   }
                 }}
+                billingStatus={billingStatus}
               />
             )}
             {activeTab === 'products' && (
@@ -1729,6 +1751,7 @@ const SyncStreamPage: FC = () => {
                 config={config}
                 onConfigRefresh={loadConfig}
                 initialFilter={productsFilter}
+                billingStatus={billingStatus}
               />
             )}
             {activeTab === 'mapping' && <MappingTab config={config} />}
