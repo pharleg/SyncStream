@@ -24,11 +24,12 @@ The proper callback handler (`/api/gmc-oauth-callback`) already exists and works
 
 ### Fix
 
-1. Run `wix release` to get the deployed URL for the app's API routes
-2. Register `/api/gmc-oauth-callback` at that URL as an authorized redirect URI in Google Cloud Console
-3. Update `gmc_redirect_uri` secret to match the deployed URL
-4. Delete `src/pages/api/gmc-exchange-code.ts` — manual flow no longer needed
-5. Remove the outdated comment from `gmc-oauth-init.ts`
+1. Run `wix release` and confirm the deployed URL for `/api/gmc-oauth-callback`
+2. **Verify URL stability** — confirm the URL does not change between releases before proceeding. If it changes on every release, the redirect URI would need re-registering each time; in that case, keep `gmc-exchange-code.ts` as a fallback. Only delete it once stability is confirmed.
+3. Register the stable callback URL as an authorized redirect URI in Google Cloud Console
+4. Update `gmc_redirect_uri` secret to match
+5. Delete `src/pages/api/gmc-exchange-code.ts` — manual flow no longer needed
+6. Remove the outdated comment from `gmc-oauth-init.ts`
 
 No code changes to `oauthService.ts` or `gmc-oauth-callback.ts` — they already implement the correct flow.
 
@@ -61,9 +62,9 @@ Wix webhook events handled by a new `/api/billing-webhook` endpoint:
 |---|---|
 | `plan.activated` | Upsert `credit_balance` row with tier quota, set `reset_date = now + 30d` |
 | `plan.renewed` | Reset `credits_remaining` to tier quota, update `reset_date` |
-| `plan.cancelled` | Downgrade to Free limits at next reset |
+| `plan.cancelled` | Set `plan_tier = 'free'` effective at next `reset_date` — merchant retains Pro access through the end of the current billing period (intentional: treat cancellation like end-of-term, not immediate cutoff) |
 
-**Free plan initialization:** No webhook needed. `billingService` lazily creates the `credit_balance` row with Free defaults (`plan_tier = 'free'`, `credits_remaining = 25`, `reset_date = now + 30d`) on first call if no row exists for that `instanceId`.
+**Free plan initialization:** No webhook needed. Every public function in `billingService` calls an internal `ensureRow(instanceId)` helper first. If no `credit_balance` row exists, it creates one with Free defaults (`plan_tier = 'free'`, `credits_remaining = 25`, `reset_date = now + 30d`) before proceeding. This means `checkSyncLimit`, `checkPlatformAccess`, and `deductCredit` all trigger lazy init — a merchant who syncs immediately after install without any billing webhook is handled correctly.
 
 `AppConfig` gains: `planTier: 'free' | 'pro'`
 
@@ -116,6 +117,8 @@ Fetches from `/api/billing-status` on load.
 
 **Sync blocked** — when Free merchant exceeds 50-product limit, sync button disables with inline message linking to Pro upgrade.
 
+**Meta connect hidden on Free** — the Meta connect card in `connect.tsx` is hidden (not just disabled) for Free plan merchants. A Free merchant cannot enter the Meta OAuth flow at all. Showing a locked/greyed connect card with upgrade prompt is acceptable; showing it as available and then failing at sync time is not.
+
 **AI enhance blocked** — when credits hit 0, Enhance button disables showing reset date. Free users also see Pro upgrade CTA.
 
 No full-page paywall. Blocks are at the action level only.
@@ -131,12 +134,13 @@ No full-page paywall. Blocks are at the action level only.
 - `supabase/migrations/YYYYMMDD_credit_balance.sql`
 
 ### Modified
-- `src/backend/syncService.ts` — add `checkSyncLimit` gate
+- `src/backend/syncService.ts` — add `checkSyncLimit` + `checkPlatformAccess` gates
 - `src/backend/aiEnhancer.ts` — add `deductCredit` gate
+- `src/extensions/dashboard/pages/connect/connect.tsx` — hide Meta card on Free plan
 - `src/extensions/dashboard/pages/sync-stream/DashboardTab.tsx` — credit counter + plan badge
 - `src/extensions/dashboard/pages/sync-stream/ProductsTab.tsx` — sync blocked state
 - `src/types/wix.types.ts` — add `planTier` to `AppConfig`
-- `supabase/migrations/` — new `app_config` column `plan_tier`
+- `supabase/migrations/20260424_app_config_plan_tier.sql` — new `plan_tier` column on `app_config`
 
 ### Deleted
 - `src/pages/api/gmc-exchange-code.ts`
