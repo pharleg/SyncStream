@@ -50,6 +50,12 @@ async function ensureRow(instanceId: string, db: SupabaseClient): Promise<Credit
 
   if (data) return data as CreditRow;
 
+  // PGRST116 = no rows found — that's expected on first call
+  if (error && (error as any).code !== 'PGRST116') {
+    throw new Error(`Billing DB error in ensureRow: ${error.message}`);
+  }
+
+  // Also check insert result
   const resetDate = new Date(Date.now() + RESET_INTERVAL_DAYS * 86_400_000).toISOString();
   const row: CreditRow = {
     instance_id: instanceId,
@@ -57,14 +63,15 @@ async function ensureRow(instanceId: string, db: SupabaseClient): Promise<Credit
     credits_remaining: FREE_CREDITS,
     reset_date: resetDate,
   };
-  await db.from('credit_balance').insert(row);
+  const { error: insertError } = await db.from('credit_balance').insert(row);
+  if (insertError) throw new Error(`Failed to create billing row: ${insertError.message}`);
   return row;
 }
 
 async function getRow(instanceId: string, db: SupabaseClient): Promise<CreditRow> {
   let row = await ensureRow(instanceId, db);
 
-  if (new Date() > new Date(row.reset_date)) {
+  if (Date.now() > new Date(row.reset_date).getTime()) {
     const newCredits = creditQuota(row.plan_tier);
     const newResetDate = new Date(Date.now() + RESET_INTERVAL_DAYS * 86_400_000).toISOString();
     await db
@@ -112,6 +119,9 @@ export async function checkPlatformAccess(
   }
 }
 
+// Note: read-modify-write is not atomic. Concurrent calls from the same
+// instanceId could over-spend by 1 credit. Acceptable for a single-user
+// dashboard where true concurrent enhancement requests are impractical.
 export async function deductCredit(instanceId: string): Promise<void> {
   const db = await getClient();
   const row = await getRow(instanceId, db);
@@ -143,9 +153,8 @@ export async function setPlanTier(
   tier: 'free' | 'pro',
 ): Promise<void> {
   const db = await getClient();
-  await ensureRow(instanceId, db);
-  await db
+  const { error } = await db
     .from('credit_balance')
-    .update({ plan_tier: tier })
-    .eq('instance_id', instanceId);
+    .upsert({ instance_id: instanceId, plan_tier: tier }, { onConflict: 'instance_id' });
+  if (error) throw new Error(`Failed to set plan tier: ${error.message}`);
 }
