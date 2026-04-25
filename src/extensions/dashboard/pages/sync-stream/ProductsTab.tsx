@@ -3,6 +3,12 @@ import { type FC, type CSSProperties, useState, useMemo, useEffect } from 'react
 import { Box, Text, Input, Button, Loader } from '@wix/design-system';
 import { ProductRow, type ProductRowData, type ApplyFixPayload } from './ProductRow';
 
+interface BillingStatus {
+  plan: 'free' | 'pro';
+  creditsRemaining: number;
+  resetDate: string;
+}
+
 interface ProductsTabProps {
   products: ProductRowData[];
   loading: boolean;
@@ -13,6 +19,7 @@ interface ProductsTabProps {
   onToggleAI: (productId: string, enabled: boolean) => Promise<void>;
   onEnhanceNow: (productId: string) => Promise<void>;
   initialFilter?: 'all' | 'failed' | 'warnings' | 'synced';
+  billingStatus?: BillingStatus | null;
 }
 
 type FilterTab = 'all' | 'failed' | 'warnings' | 'synced';
@@ -27,12 +34,15 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   onToggleAI,
   onEnhanceNow,
   initialFilter = 'all',
+  billingStatus,
 }) => {
   const [activeFilter, setActiveFilter] = useState<FilterTab>(initialFilter);
   const [search, setSearch] = useState('');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [checking, setChecking] = useState(false);
+
+  const syncBlocked = billingStatus?.plan === 'free' && products.length > 50;
 
   // Reset to initialFilter when it changes (e.g. navigated from dashboard "Fix Issues")
   useEffect(() => { setActiveFilter(initialFilter); }, [initialFilter]);
@@ -107,6 +117,29 @@ export const ProductsTab: FC<ProductsTabProps> = ({
 
   return (
     <Box direction="vertical" gap="12px">
+      {syncBlocked && (
+        <Box
+          verticalAlign="middle"
+          gap="12px"
+          style={{
+            padding: '10px 14px',
+            background: '#fff8e1',
+            border: '1px solid #f5d67a',
+            borderRadius: 8,
+          }}
+        >
+          <Text size="small" style={{ flex: 1 }}>
+            Free plan is limited to 50 products. You have {products.length} products — sync is paused.
+          </Text>
+          <Button
+            size="small"
+            style={{ background: '#f5a623', color: 'white', border: 'none' }}
+            onClick={() => window.open('https://manage.wix.com/app-market', '_blank')}
+          >
+            Upgrade to Pro
+          </Button>
+        </Box>
+      )}
       {/* Toolbar */}
       <Box gap="8px" verticalAlign="middle" style={{ flexWrap: 'wrap' }}>
         <Box gap="6px">
@@ -136,7 +169,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
         <Button size="small" skin="light" onClick={handleCheckCompliance} disabled={checking}>
           {checking ? <Loader size="tiny" /> : 'Check All'}
         </Button>
-        <Button size="small" onClick={handleSyncNow} disabled={syncing}>
+        <Button size="small" onClick={handleSyncNow} disabled={syncing || syncBlocked}>
           {syncing ? <Loader size="tiny" /> : 'Sync Now'}
         </Button>
       </Box>
