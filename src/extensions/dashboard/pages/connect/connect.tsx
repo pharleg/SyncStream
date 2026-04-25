@@ -10,9 +10,15 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
+import { httpClient } from '@wix/essentials';
+
+function connectFetch(path: string, init?: RequestInit): Promise<Response> {
+  const url = new URL(path, new URL(import.meta.url).origin).toString();
+  return httpClient.fetchWithAuth(url, init);
+}
 
 async function callInitiateGmcOAuth(): Promise<string> {
-  const response = await fetch('/api/gmc-oauth-init?instanceId=default');
+  const response = await connectFetch('/api/gmc-oauth-init?instanceId=default');
   const data = await response.json();
   if (!response.ok) throw new Error(data.error);
   return data.authUrl;
@@ -22,13 +28,13 @@ async function callGetAppConfig(): Promise<{
   gmcConnected: boolean;
   metaConnected: boolean;
 } | null> {
-  const response = await fetch('/api/app-config?instanceId=default');
+  const response = await connectFetch('/api/app-config?instanceId=default');
   if (!response.ok) return null;
   return response.json();
 }
 
 async function callGetBillingStatus(): Promise<{ plan: 'free' | 'pro' } | null> {
-  const response = await fetch('/api/billing-status?instanceId=default');
+  const response = await connectFetch('/api/billing-status?instanceId=default');
   if (!response.ok) return null;
   return response.json();
 }
@@ -38,7 +44,10 @@ const ConnectPage: FC = () => {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [plan, setPlan] = useState<'free' | 'pro'>('free');
+  // null = unknown/loading (billing fetch hasn't resolved or failed)
+  // 'free' = confirmed free plan (show upgrade wall)
+  // 'pro' = confirmed pro plan (show Meta connect card)
+  const [plan, setPlan] = useState<'free' | 'pro' | null>(null);
   const [metaConnected, setMetaConnected] = useState(false);
 
   useEffect(() => {
@@ -51,8 +60,11 @@ const ConnectPage: FC = () => {
         if (billing) {
           setPlan(billing.plan);
         }
+        // If billing fetch failed, plan remains null — Pro users won't be blocked
       })
-      .catch(() => {})
+      .catch(() => {
+        // On billing failure, leave plan as null so Pro users are not shown upgrade wall
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -127,7 +139,8 @@ const ConnectPage: FC = () => {
               />
             </Card>
 
-            {plan === 'pro' ? (
+            {plan !== 'free' ? (
+              // Pro or unknown (billing fetch failed): show connect card so Pro users aren't blocked
               <Card>
                 <Card.Header
                   title="Meta Product Catalog"
@@ -150,6 +163,7 @@ const ConnectPage: FC = () => {
                 />
               </Card>
             ) : (
+              // Explicitly confirmed free plan: show upgrade wall
               <Card>
                 <Card.Header
                   title="Meta Product Catalog"
