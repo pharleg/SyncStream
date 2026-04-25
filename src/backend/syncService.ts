@@ -149,9 +149,6 @@ async function syncProductChunk(
   products: WixProduct[],
   platforms: SyncOptions['platforms'],
 ): Promise<BatchSyncResult> {
-  // Billing gate: enforce Free plan product limit before doing any work
-  await checkSyncLimit(instanceId, products.length);
-
   const allProductIds = products.map((p) => p._id ?? p.id);
 
   // Single RPC call replaces: getAppConfig + getFilters + getRules +
@@ -557,6 +554,9 @@ export async function runPaginatedSync(
     const allProducts: WixProduct[] = cached.map((cp) => cp.productData as WixProduct);
     const totalProducts = allProducts.length;
     progress.totalProducts = totalProducts;
+
+    // Billing gate: enforce Free plan product limit against TOTAL catalog size
+    await checkSyncLimit(instanceId, totalProducts);
 
     // Process in chunks
     for (let offset = 0; offset < totalProducts; offset += MAX_PRODUCTS_PER_SYNC) {

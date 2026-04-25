@@ -1,6 +1,36 @@
 import type { APIRoute } from 'astro';
+import { createHmac } from 'node:crypto';
 import { setPlanTier } from '../../backend/billingService';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
+
+/**
+ * Verify Wix webhook HMAC-SHA256 signature.
+ * Wix signs the raw request body with the app secret and sends the result
+ * base64-encoded in the x-wix-signature header.
+ */
+async function verifyWixSignature(request: Request, rawBody: string): Promise<boolean> {
+  const signature = request.headers.get('x-wix-signature');
+  if (!signature) return false;
+
+  // App secret comes from Wix App Dashboard > Webhooks > secret key.
+  // Stored in Wix Secrets Manager under 'wix_webhook_secret'.
+  const { secrets } = await import('@wix/secrets');
+  let appSecret: string;
+  try {
+    const secretResult = await secrets.getSecretValue('wix_webhook_secret');
+    appSecret = secretResult.value ?? '';
+  } catch {
+    return false;
+  }
+
+  if (!appSecret) return false;
+
+  const expected = createHmac('sha256', appSecret)
+    .update(rawBody)
+    .digest('base64');
+
+  return expected === signature;
+}
 
 /**
  * Handles Wix app instance change events on plan upgrade/downgrade.
@@ -8,7 +38,15 @@ import { getAppConfig, saveAppConfig } from '../../backend/dataService';
  */
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json() as {
+    const rawBody = await request.text();
+
+    // Verify Wix webhook signature before processing any payload
+    const isValid = await verifyWixSignature(request, rawBody);
+    if (!isValid) {
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), { status: 401 });
+    }
+
+    const body = JSON.parse(rawBody) as {
       eventType?: string;
       instanceId?: string;
       data?: {
