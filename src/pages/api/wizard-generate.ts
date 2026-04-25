@@ -8,6 +8,7 @@
 import type { APIRoute } from 'astro';
 import { getCachedProductsByIds, getAppConfig } from '../../backend/dataService';
 import { enhanceProduct } from '../../backend/aiEnhancer';
+import { BillingError } from '../../backend/billingService';
 import type { WixProduct } from '../../types/wix.types';
 
 export const POST: APIRoute = async ({ request }) => {
@@ -46,6 +47,12 @@ export const POST: APIRoute = async ({ request }) => {
       { headers: { 'Content-Type': 'application/json' } },
     );
   } catch (error) {
+    if (error instanceof BillingError) {
+      return new Response(JSON.stringify({ error: error.message, code: error.code }), {
+        status: 402,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     const message = error instanceof Error ? error.message : 'Unknown error';
     return new Response(JSON.stringify({ error: message }), {
       status: 500, headers: { 'Content-Type': 'application/json' },

@@ -15,6 +15,9 @@ import {
   getBulkEnhancedContent,
   saveEnhancedContent,
 } from './dataService';
+import { deductCredit, BillingError } from './billingService';
+
+export { BillingError };
 
 let _anthropicClient: Anthropic | null = null;
 
@@ -76,8 +79,11 @@ Respond with ONLY a JSON object:
 /** Enhance a single product's content via Claude API. */
 async function generateEnhancement(
   product: WixProduct,
+  instanceId: string,
   style?: string,
 ): Promise<{ title: string; description: string }> {
+  await deductCredit(instanceId);
+
   const client = await getAnthropicClient();
   const prompt = buildEnhancementPrompt(product, style);
 
@@ -126,7 +132,7 @@ export async function enhanceProduct(
     };
   }
 
-  const enhanced = await generateEnhancement(product, style);
+  const enhanced = await generateEnhancement(product, instanceId, style);
 
   await saveEnhancedContent({
     instanceId,
@@ -167,7 +173,7 @@ export async function enhanceProducts(
       continue;
     }
 
-    const enhanced = await generateEnhancement(product, style);
+    const enhanced = await generateEnhancement(product, instanceId, style);
 
     await saveEnhancedContent({
       instanceId,
