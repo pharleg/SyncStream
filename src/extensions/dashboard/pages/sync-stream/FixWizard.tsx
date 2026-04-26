@@ -46,6 +46,7 @@ export interface FixWizardProps {
   issueGroups: IssueGroup[];
   config: AppConfigData;
   onComplete: () => void;
+  onSyncNow?: () => Promise<void>;
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -78,7 +79,8 @@ async function appFetch(path: string, init?: RequestInit): Promise<Response> {
 
 // ── FixWizard ──────────────────────────────────────────────────────────────
 
-export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete }) => {
+export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete, onSyncNow }) => {
+  const [syncing, setSyncing] = useState(false);
   const [loadingCompliance, setLoadingCompliance] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -305,13 +307,32 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete 
   }
 
   if (phase1Steps.length === 0 && phase2Products.length === 0) {
+    const handleSyncAndDone = async () => {
+      if (!onSyncNow) { onComplete(); return; }
+      setSyncing(true);
+      try {
+        await onSyncNow();
+      } finally {
+        setSyncing(false);
+        onComplete();
+      }
+    };
     return (
       <Box direction="vertical" gap="16px">
         <SectionHelper appearance="success">
-          <Text weight="bold">All issues resolved!</Text>
-          <Text size="small" secondary>Sync again to push the fixes to Google.</Text>
+          <Box direction="vertical" gap="4px">
+            <Text weight="bold">All issues resolved!</Text>
+            <Text size="small" secondary>Sync now to push the fixes to Google.</Text>
+          </Box>
         </SectionHelper>
-        <Button onClick={onComplete} size="small">Done</Button>
+        <Box gap="8px">
+          {onSyncNow && (
+            <Button onClick={handleSyncAndDone} disabled={syncing}>
+              {syncing ? <Loader size="tiny" /> : 'Sync Now'}
+            </Button>
+          )}
+          <Button onClick={onComplete} skin="light" disabled={syncing}>Done</Button>
+        </Box>
       </Box>
     );
   }

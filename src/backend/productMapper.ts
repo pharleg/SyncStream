@@ -38,21 +38,25 @@ function truncate(str: string, maxLen: number): string {
 
 /**
  * Strip hyphens from a UUID and return at most `maxLen` chars.
- * UUID without hyphens = 32 hex chars, well under GMC's 50-char offerId limit.
  */
 function shortId(id: string, maxLen = 32): string {
   return id.replace(/-/g, '').slice(0, maxLen);
 }
 
+// GMC Merchant API v1 validates the composite resource ID as
+// `{contentLanguage}~{feedLabel}~{offerId}` = "en~US~" (6 chars) + offerId.
+// Effective offerId limit = 50 - 6 = 44. Use 40 for safety margin.
+const OFFER_ID_MAX = 40;
+
 /**
- * Build a GMC-safe offerId (max 50 chars).
- * - If the product has a SKU, use it (truncated to 50).
- * - Multi-variant fallback: first 24 hex chars of parentId + '_' + first 24 of variantId = 49 chars.
- * - Single-variant fallback: 32 hex chars of the product ID.
+ * Build a GMC-safe offerId (max 40 chars after accounting for the en~US~ prefix).
+ * - SKU: truncated to 40 chars.
+ * - Multi-variant fallback: 19hex + '_' + 19hex = 39 chars.
+ * - Single-variant fallback: 32 hex chars (UUID without hyphens).
  */
 function buildOfferId(sku: string | undefined, parentId: string, variantId: string, isMultiVariant: boolean): string {
-  if (sku) return truncate(sku, 50);
-  if (isMultiVariant) return `${shortId(parentId, 24)}_${shortId(variantId, 24)}`;
+  if (sku) return truncate(sku, OFFER_ID_MAX);
+  if (isMultiVariant) return `${shortId(parentId, 19)}_${shortId(variantId, 19)}`;
   return shortId(parentId);
 }
 

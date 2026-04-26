@@ -58,11 +58,11 @@ export async function insertProduct(
   product: GmcProductInput,
   accessToken: string,
 ): Promise<GmcInsertResponse> {
-  if (product.offerId.length > 50) {
+  if (product.offerId.length > 40) {
     console.error(
-      `[gmcClient] offerId too long (${product.offerId.length} chars): "${product.offerId}" — truncating to 50`,
+      `[gmcClient] offerId too long (${product.offerId.length} chars): "${product.offerId}" — truncating to 40`,
     );
-    product = { ...product, offerId: product.offerId.slice(0, 50) };
+    product = { ...product, offerId: product.offerId.slice(0, 40) };
   }
   const dataSource = `accounts/${merchantId}/dataSources/${dataSourceId}`;
   return gmcFetch<GmcInsertResponse>(

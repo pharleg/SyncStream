@@ -93,6 +93,8 @@ const ExpandedPanel: FC<{
   const [fixValues, setFixValues] = useState<Record<string, string>>(initialValues);
   const [applying, setApplying] = useState(false);
   const [enhancing, setEnhancing] = useState(false);
+  // Local AI preview — mirrors persisted state but toggles description preview immediately
+  const [aiPreview, setAiPreview] = useState(product.aiEnabled);
 
   const handleApply = async (target: 'wix' | 'gmc' | 'both') => {
     setApplying(true);
@@ -107,10 +109,20 @@ const ExpandedPanel: FC<{
     setEnhancing(true);
     try {
       await onEnhanceNow(product.productId);
+      setAiPreview(true);
     } finally {
       setEnhancing(false);
     }
   };
+
+  const handleAiToggle = (checked: boolean) => {
+    setAiPreview(checked);
+    onToggleAI(product.productId, checked).catch(() => {});
+  };
+
+  const descriptionToShow = aiPreview && product.enhancedDescription
+    ? product.enhancedDescription
+    : (product.description ?? '');
 
   return (
     <Box gap="24px" style={{ background: '#f7f9fb', borderTop: '1px solid #e8edf0', padding: '14px 14px 14px 58px' }}>
@@ -158,6 +170,14 @@ const ExpandedPanel: FC<{
             <Text size="small">{value}</Text>
           </Box>
         ))}
+        <Box direction="vertical">
+          <Text size="tiny" secondary>Description</Text>
+          <Text size="small" style={{ whiteSpace: 'pre-wrap' }}>
+            {product.description
+              ? (product.description.length > 200 ? product.description.slice(0, 200) + '…' : product.description)
+              : '—'}
+          </Text>
+        </Box>
         {product.imageUrl && (
           <Box direction="vertical" marginTop="4px">
             <Text size="tiny" secondary>Image</Text>
@@ -176,17 +196,34 @@ const ExpandedPanel: FC<{
         <Box gap="8px" verticalAlign="middle">
           <ToggleSwitch
             size="small"
-            checked={product.aiEnabled}
-            onChange={(e) => onToggleAI(product.productId, e.target.checked).catch(() => {})}
+            checked={aiPreview}
+            onChange={(e) => handleAiToggle(e.target.checked)}
           />
-          <Text size="small">{product.aiEnabled ? 'Auto-enhance on sync' : 'Enhancement off'}</Text>
+          <Text size="small" weight="bold">
+            {aiPreview ? '✦ AI-Enhanced Description' : 'Original Description'}
+          </Text>
         </Box>
-        {product.lastEnhancedAt ? (
+        {/* Description preview — switches with the toggle */}
+        <div style={{
+          background: aiPreview ? '#f0f5ff' : '#fff',
+          border: `1px solid ${aiPreview ? '#c0d4ff' : '#e8edf0'}`,
+          borderRadius: 4,
+          padding: '8px 10px',
+          fontSize: 12,
+          lineHeight: 1.5,
+          color: '#32536a',
+          minHeight: 60,
+          whiteSpace: 'pre-wrap',
+        }}>
+          {descriptionToShow || <span style={{ color: '#aaa', fontStyle: 'italic' }}>No description</span>}
+        </div>
+        {aiPreview && !product.enhancedDescription && (
+          <Text size="tiny" secondary>No AI version yet — click Enhance to generate one.</Text>
+        )}
+        {product.lastEnhancedAt && (
           <Text size="tiny" secondary>
             Last enhanced: {new Date(product.lastEnhancedAt).toLocaleDateString()}
           </Text>
-        ) : (
-          <Text size="tiny" secondary>Not enhanced yet</Text>
         )}
         <Button size="small" skin="light" onClick={handleEnhance} disabled={enhancing}>
           {enhancing ? <Loader size="tiny" /> : '✦ Enhance This Product'}
@@ -268,7 +305,7 @@ export const ProductRow: FC<ProductRowProps> = ({
         </Box>
 
         {/* AI toggle */}
-        <Box gap="6px" verticalAlign="middle" style={{ width: 80, flexShrink: 0 }} paddingTop="2px">
+        <Box gap="6px" verticalAlign="middle" style={{ width: 88, flexShrink: 0 }} paddingTop="2px">
           <ToggleSwitch
             size="small"
             checked={product.aiEnabled}
@@ -277,18 +314,31 @@ export const ProductRow: FC<ProductRowProps> = ({
               onToggleAI(product.productId, e.target.checked).catch(() => {});
             }}
           />
-          <Text size="tiny" secondary>{product.aiEnabled ? 'Enhanced' : 'Off'}</Text>
+          <Text size="tiny" secondary>{product.aiEnabled ? 'On' : 'Off'}</Text>
         </Box>
 
         {/* Action */}
-        <Box style={{ width: 36, flexShrink: 0 }} verticalAlign="top" paddingTop="2px">
-          <Text
-            size="tiny"
-            weight="bold"
-            style={{ color: hasErrors ? '#c62828' : '#116dff', cursor: 'pointer' }}
-          >
-            {hasErrors || hasWarnings ? 'Fix' : '›'}
-          </Text>
+        <Box style={{ width: 64, flexShrink: 0 }} verticalAlign="top" paddingTop="1px">
+          {hasErrors || hasWarnings ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onExpand(isExpanded ? null : product.productId); }}
+              style={{
+                background: hasErrors ? '#c62828' : '#2e7d32',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 4,
+                padding: '5px 12px',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Fix
+            </button>
+          ) : (
+            <Text size="small" secondary style={{ cursor: 'pointer', paddingTop: 2 }}>›</Text>
+          )}
         </Box>
       </div>
 

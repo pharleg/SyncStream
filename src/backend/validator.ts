@@ -73,20 +73,20 @@ export function validateGmc(
   const offerErr = requiredString(product.offerId, 'offerId', productId);
   if (offerErr) errors.push(offerErr);
 
-  if (product.offerId && product.offerId.length > 50) {
+  if (product.offerId && product.offerId.length > 40) {
     errors.push({
       field: 'offerId',
       platform: 'gmc',
-      message: `SKU/offerId is ${product.offerId.length} characters — GMC limit is 50. Shorten the SKU on this product.`,
+      message: `SKU/offerId is ${product.offerId.length} characters — effective GMC limit is 40. Shorten the SKU on this product.`,
       productId,
       severity: 'error',
     });
   }
 
   // SKU warning: hex-only fallback IDs suggest no merchant SKU was set.
-  // Fallback format: 32 hex chars (single) or 24hex_24hex (multi-variant).
+  // Fallback format: 32 hex chars (single) or 19hex_19hex (multi-variant).
   if (product.offerId) {
-    const looksLikeFallback = /^[0-9a-f]{24,32}(_[0-9a-f]{24,32})?$/i.test(product.offerId);
+    const looksLikeFallback = /^[0-9a-f]{19,32}(_[0-9a-f]{19,32})?$/i.test(product.offerId);
     if (looksLikeFallback) {
       errors.push({
         field: 'offerId',

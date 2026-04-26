@@ -187,7 +187,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
             background: '#f7f9fb',
             borderBottom: '1px solid #e8edf0',
             display: 'grid',
-            gridTemplateColumns: '36px 1fr 72px 72px 80px 36px',
+            gridTemplateColumns: '36px 1fr 72px 72px 88px 64px',
           }}
         >
           <span />
@@ -198,7 +198,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
           <Text size="tiny" secondary weight="bold">
             {config?.metaConnected ? 'Meta' : '—'}
           </Text>
-          <Text size="tiny" secondary weight="bold">AI</Text>
+          <Text size="tiny" secondary weight="bold">AI Enhance</Text>
           <span />
         </Box>
 

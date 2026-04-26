@@ -39,6 +39,20 @@ async function callGetBillingStatus(): Promise<{ plan: 'free' | 'pro' } | null> 
   return response.json();
 }
 
+async function callCompleteGmcOAuth(): Promise<boolean> {
+  try {
+    const response = await connectFetch('/api/gmc-complete-oauth', {
+      method: 'POST',
+      body: JSON.stringify({ instanceId: 'default' }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json();
+    return data.connected === true;
+  } catch {
+    return false;
+  }
+}
+
 const ConnectPage: FC = () => {
   const [gmcConnected, setGmcConnected] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -51,20 +65,19 @@ const ConnectPage: FC = () => {
   const [metaConnected, setMetaConnected] = useState(false);
 
   useEffect(() => {
-    Promise.all([callGetAppConfig(), callGetBillingStatus()])
-      .then(([config, billing]) => {
+    Promise.all([callGetAppConfig(), callGetBillingStatus(), callCompleteGmcOAuth()])
+      .then(([config, billing, gmcJustConnected]) => {
         if (config) {
-          setGmcConnected(config.gmcConnected);
+          setGmcConnected(config.gmcConnected || gmcJustConnected);
           setMetaConnected(config.metaConnected ?? false);
+        } else if (gmcJustConnected) {
+          setGmcConnected(true);
         }
         if (billing) {
           setPlan(billing.plan);
         }
-        // If billing fetch failed, plan remains null — Pro users won't be blocked
       })
-      .catch(() => {
-        // On billing failure, leave plan as null so Pro users are not shown upgrade wall
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
 

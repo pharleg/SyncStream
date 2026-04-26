@@ -1333,6 +1333,10 @@ const DashboardTab: FC<{
             await loadData();
             await onRefresh();
           }}
+          onSyncNow={async () => {
+            await triggerSync();
+            await loadData();
+          }}
         />
       );
     }
@@ -1652,6 +1656,13 @@ const SyncStreamPage: FC = () => {
 
   const loadConfig = useCallback(async () => {
     try {
+      // Complete pending GMC OAuth if present — no-op if no pending code (fast Supabase read)
+      await appFetch('/api/gmc-complete-oauth', {
+        method: 'POST',
+        body: JSON.stringify({ instanceId: 'default' }),
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(() => {});
+
       const [configRes, billingRes] = await Promise.all([
         appFetch('/api/app-config?instanceId=default'),
         appFetch('/api/billing-status?instanceId=default'),
