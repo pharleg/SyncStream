@@ -223,7 +223,7 @@ const SettingsPage: FC = () => {
             <Card>
               <Card.Header
                 title="AI Description Enhancement"
-                subtitle="Use Claude AI to optimize product descriptions for search engines"
+                subtitle="Use SyncStream AI to optimize product descriptions for search engines"
               />
               <Card.Divider />
               <Card.Content>

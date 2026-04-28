@@ -404,8 +404,10 @@ const ConfirmSetupScreen: FC<{
       {error && <SectionHelper appearance="danger">{error}</SectionHelper>}
 
       <SectionHelper appearance="standard">
-        <Text weight="bold">We found the following from your Wix store</Text>
-        <Text size="small" secondary>Review and confirm — these become the defaults for all your products.</Text>
+        <Box direction="vertical" gap="4px">
+          <Text weight="bold">We found the following from your Wix store</Text>
+          <Text size="small" secondary>Review and confirm — these become the defaults for all your products.</Text>
+        </Box>
       </SectionHelper>
 
       <Card>
@@ -1101,11 +1103,13 @@ function getDashboardState(
 const FreshView: FC<{ onTabChange: (tab: string) => void }> = ({ onTabChange }) => (
   <Box direction="vertical" gap="16px">
     <SectionHelper appearance="standard">
-      <Text weight="bold">Welcome to SyncStream</Text>
-      <Text size="small" secondary>
-        Connect your Google Merchant Center account to get started. Once connected,
-        we'll walk you through setting up your product feed.
-      </Text>
+      <Box direction="vertical" gap="4px">
+        <Text weight="bold">Welcome to SyncStream</Text>
+        <Text size="small" secondary>
+          Connect your Google Merchant Center account to get started. Once connected,
+          we'll walk you through setting up your product feed.
+        </Text>
+      </Box>
     </SectionHelper>
     <Box>
       <Button onClick={() => onTabChange('connect')}>Connect Google Merchant Center →</Button>
@@ -1134,21 +1138,23 @@ const SetupModeView: FC<{
   return (
     <Box direction="vertical" gap="16px">
       <SectionHelper appearance="warning">
-        <Text weight="bold">
-          {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} couldn't sync
-          {hasValidationIssues
-            ? issueCount === 1
-              ? ' — 1 thing to fix'
-              : ` — ${issueCount} things to fix`
-            : ' — review errors in the Products tab'}
-        </Text>
-        <Text size="small" secondary>
-          {hasValidationIssues
-            ? 'Complete the steps below, then sync again to go live.'
-            : 'These products were rejected by Google Merchant Center. Check the Products tab for details on each error.'}
-        </Text>
-        <Box marginTop="12px">
-          <Button onClick={onLaunchWizard} size="small">Fix Issues →</Button>
+        <Box direction="vertical" gap="4px">
+          <Text weight="bold">
+            {syncSummary.totalErrors} product{syncSummary.totalErrors !== 1 ? 's' : ''} couldn't sync
+            {hasValidationIssues
+              ? issueCount === 1
+                ? ' — 1 thing to fix'
+                : ` — ${issueCount} things to fix`
+              : ' — review errors in the Products tab'}
+          </Text>
+          <Text size="small" secondary>
+            {hasValidationIssues
+              ? 'Complete the steps below, then sync again to go live.'
+              : 'These products were rejected by Google Merchant Center. Check the Products tab for details on each error.'}
+          </Text>
+          <Box marginTop="12px">
+            <Button onClick={onLaunchWizard} size="small">Fix Issues →</Button>
+          </Box>
         </Box>
       </SectionHelper>
 
@@ -1569,7 +1575,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
       <Card>
         <Card.Header
           title="AI Description Enhancement"
-          subtitle="Use Claude AI to optimize product descriptions for search engines"
+          subtitle="Use SyncStream AI to optimize product descriptions for search engines"
         />
         <Card.Divider />
         <Card.Content>

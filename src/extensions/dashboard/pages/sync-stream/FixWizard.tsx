@@ -373,6 +373,10 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
                 textAlign: 'center' as const,
                 cursor: isDisabled ? 'default' : 'pointer',
                 background: isDone ? '#f0faf5' : isActive ? '#f0f5ff' : '#fff',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2,
               }}
               onClick={() => { if (!isDisabled) setPhase(p); }}
             >
@@ -383,7 +387,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
               >
                 {isDone ? '✓ ' : ''}{`Phase ${p}`}
               </Text>
-              <Text size="tiny" secondary style={{ display: 'block', marginTop: '2px' }}>
+              <Text size="tiny" secondary>
                 {p === 1 ? 'Global fixes' : 'Per-product fixes'}
               </Text>
             </div>

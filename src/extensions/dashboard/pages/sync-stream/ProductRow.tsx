@@ -270,7 +270,7 @@ export const ProductRow: FC<ProductRowProps> = ({
         </Box>
 
         {/* Product info + issues */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Text size="small" weight="bold">{product.name}</Text>
           <Text size="tiny" secondary>
             {product.sku ? `SKU: ${product.sku}` : 'No SKU'} · {product.variantCount} variant{product.variantCount !== 1 ? 's' : ''}
