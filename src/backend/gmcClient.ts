@@ -65,14 +65,19 @@ export async function insertProduct(
     product = { ...product, offerId: product.offerId.slice(0, 40) };
   }
   const dataSource = `accounts/${merchantId}/dataSources/${dataSourceId}`;
-  return gmcFetch<GmcInsertResponse>(
-    `/products/v1/accounts/${merchantId}/productInputs:insert?dataSource=${encodeURIComponent(dataSource)}`,
-    accessToken,
-    {
-      method: 'POST',
-      body: JSON.stringify(product),
-    },
-  );
+  try {
+    return await gmcFetch<GmcInsertResponse>(
+      `/products/v1/accounts/${merchantId}/productInputs:insert?dataSource=${encodeURIComponent(dataSource)}`,
+      accessToken,
+      {
+        method: 'POST',
+        body: JSON.stringify(product),
+      },
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`[offerId: ${product.offerId}] ${msg}`);
+  }
 }
 
 /**

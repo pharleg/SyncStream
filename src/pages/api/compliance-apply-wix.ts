@@ -18,7 +18,13 @@ export const POST: APIRoute = async ({ request }) => {
   try {
     const body = await request.json();
     const productId: string = body.productId;
-    const rawFixes: Array<{ field: string; value: string }> = body.fixes ?? [];
+    // Accept both array [{ field, value }] and object { field: value } formats
+    let rawFixes: Array<{ field: string; value: string }> = [];
+    if (Array.isArray(body.fixes)) {
+      rawFixes = body.fixes;
+    } else if (body.fixes && typeof body.fixes === 'object') {
+      rawFixes = Object.entries(body.fixes as Record<string, string>).map(([field, value]) => ({ field, value: String(value) }));
+    }
 
     const fields: { title?: string; description?: string } = {};
     for (const fix of rawFixes) {

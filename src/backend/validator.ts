@@ -63,7 +63,7 @@ export function validateGmc(
     errors.push({
       field: 'brand',
       platform: 'gmc',
-      message: 'No brand set — set a Store Name in Field Mapping to improve GMC catalog matching.',
+      message: 'No brand name set — add your store or brand name in Field Mapping to improve how this product appears in Google.',
       productId,
       severity: 'warning',
     });
@@ -77,7 +77,7 @@ export function validateGmc(
     errors.push({
       field: 'offerId',
       platform: 'gmc',
-      message: `SKU/offerId is ${product.offerId.length} characters — effective GMC limit is 40. Shorten the SKU on this product.`,
+      message: `Product code (SKU) is too long (${product.offerId.length} characters, max 40). Shorten the SKU on this product in Wix.`,
       productId,
       severity: 'error',
     });
@@ -91,7 +91,7 @@ export function validateGmc(
       errors.push({
         field: 'offerId',
         platform: 'gmc',
-        message: 'No SKU set — using generated fallback ID. Add a SKU to this product/variant for cleaner GMC tracking.',
+        message: 'No product code (SKU) — we assigned one automatically. Tip: adding an SKU in Wix helps you track this product more easily.',
         productId,
         severity: 'warning',
       });
@@ -149,7 +149,7 @@ export function validateGmc(
     errors.push({
       field: 'description',
       platform: 'gmc',
-      message: 'Description is identical to title — product has no real description. Add a description for better feed quality.',
+      message: 'Product description is the same as the title. Add a real description to improve how this product shows up in Google Shopping.',
       productId,
       severity: 'warning',
     });
@@ -157,7 +157,7 @@ export function validateGmc(
     errors.push({
       field: 'description',
       platform: 'gmc',
-      message: `Description is very short (${attrs.description.length} chars). GMC recommends at least 150 characters.`,
+      message: `Description is very short (${attrs.description.length} characters). Add more detail — Google recommends at least 150 characters for better visibility.`,
       productId,
       severity: 'warning',
     });

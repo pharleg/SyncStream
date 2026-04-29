@@ -347,6 +347,20 @@ const ConfirmSetupScreen: FC<{
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [productCount, setProductCount] = useState<number | null>(null);
+  const [pulling, setPulling] = useState(true);
+
+  useEffect(() => {
+    appFetch('/api/products-pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instanceId: 'default' }),
+    })
+      .then((r) => r.json())
+      .then((d: { count?: number }) => setProductCount(d.count ?? 0))
+      .catch(() => setProductCount(0))
+      .finally(() => setPulling(false));
+  }, []);
 
   const saveDefaults = useCallback(async () => {
     await saveAppConfig({
@@ -455,7 +469,9 @@ const ConfirmSetupScreen: FC<{
             <Box direction="vertical" gap="8px" paddingTop="8px" style={{ borderTop: '1px solid #eee' }}>
               <Box gap="12px">
                 <Text size="small" secondary>Products found in your store:</Text>
-                <Text size="small" weight="bold">syncing to Google Merchant Center</Text>
+                <Text size="small" weight="bold">
+                  {pulling ? 'Loading…' : productCount !== null ? `${productCount} product${productCount === 1 ? '' : 's'} ready to sync` : 'syncing to Google Merchant Center'}
+                </Text>
               </Box>
             </Box>
           </Box>
@@ -465,10 +481,10 @@ const ConfirmSetupScreen: FC<{
           <Box direction="vertical" gap="12px">
             <Button
               onClick={handleConfirmAndSync}
-              disabled={saving || syncing || !brand}
+              disabled={saving || syncing || pulling || !brand}
               fullWidth
             >
-              {syncing ? 'Running first sync…' : saving ? 'Saving…' : 'Looks good — run first sync →'}
+              {syncing ? 'Running first sync…' : saving ? 'Saving…' : pulling ? 'Loading products…' : 'Looks good — run first sync →'}
             </Button>
             <Button
               skin="light"
@@ -1366,7 +1382,7 @@ const DashboardTab: FC<{
 
   // Normal state: new design
   const stats: DashboardStats = {
-    total: (data?.totalSynced ?? 0) + (data?.totalErrors ?? 0) + (data?.totalPending ?? 0),
+    total: (data?.totalSynced ?? 0) + (data?.totalErrors ?? 0) + (data?.totalPending ?? 0) + ((data as SyncStatusData | null)?.totalWarnings ?? 0),
     synced: data?.totalSynced ?? 0,
     failed: data?.totalErrors ?? 0,
     warnings: (data as SyncStatusData | null)?.totalWarnings ?? 0,

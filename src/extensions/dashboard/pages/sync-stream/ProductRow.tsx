@@ -92,14 +92,18 @@ const ExpandedPanel: FC<{
 
   const [fixValues, setFixValues] = useState<Record<string, string>>(initialValues);
   const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
   const [enhancing, setEnhancing] = useState(false);
   // Local AI preview — mirrors persisted state but toggles description preview immediately
   const [aiPreview, setAiPreview] = useState(product.aiEnabled);
 
-  const handleApply = async (target: 'wix' | 'gmc' | 'both') => {
+  const handleApply = async (target: 'wix' | 'gmc' | 'both', overrideFixes?: Record<string, string>) => {
     setApplying(true);
+    setApplyError(null);
     try {
-      await onApplyFix({ productId: product.productId, fixes: fixValues, target });
+      await onApplyFix({ productId: product.productId, fixes: overrideFixes ?? fixValues, target });
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : 'Failed to apply');
     } finally {
       setApplying(false);
     }
@@ -125,7 +129,13 @@ const ExpandedPanel: FC<{
     : (product.description ?? '');
 
   return (
-    <Box gap="24px" style={{ background: '#f7f9fb', borderTop: '1px solid #e8edf0', padding: '14px 14px 14px 58px' }}>
+    <Box direction="vertical" gap="8px" style={{ background: '#f7f9fb', borderTop: '1px solid #e8edf0', padding: '14px 14px 14px 58px' }}>
+      {applyError && (
+        <div style={{ color: '#c62828', fontSize: 12, padding: '6px 10px', background: '#fff5f5', borderRadius: 4, border: '1px solid #ffcdd2' }}>
+          {applyError}
+        </div>
+      )}
+      <Box gap="24px">
       {/* Column 1: Fix inputs */}
       <Box direction="vertical" style={{ flex: 1 }} gap="8px">
         <Text size="small" weight="bold">Fix Issues</Text>
@@ -228,6 +238,16 @@ const ExpandedPanel: FC<{
         <Button size="small" skin="light" onClick={handleEnhance} disabled={enhancing}>
           {enhancing ? <Loader size="tiny" /> : '✦ Enhance This Product'}
         </Button>
+        {product.enhancedDescription && (
+          <Button
+            size="small"
+            onClick={() => handleApply('wix', { description: product.enhancedDescription! })}
+            disabled={applying}
+          >
+            Apply AI to Wix
+          </Button>
+        )}
+      </Box>
       </Box>
     </Box>
   );

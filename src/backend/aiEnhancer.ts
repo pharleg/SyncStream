@@ -199,17 +199,20 @@ export async function applyEnhancementsToWix(
   instanceId: string,
   productUpdates: Array<{ productId: string; title: string; description: string }>,
 ): Promise<Array<{ productId: string; success: boolean; error?: string }>> {
+  const { elevate } = await import('@wix/essentials/auth');
   const { productsV3 } = await import('@wix/stores');
+  // elevate() gives the app's backend credentials — required to write Wix products from an API route
+  const elevatedProductsV3 = elevate(productsV3);
   const results: Array<{ productId: string; success: boolean; error?: string }> = [];
 
   for (const update of productUpdates) {
     try {
       // Fetch current product to get revision (required by V3 API)
-      const current = await productsV3.getProduct(update.productId) as any;
+      const current = await elevatedProductsV3.getProduct(update.productId) as any;
       const revision = current?.revision;
 
       if (!revision) {
-        results.push({ productId: update.productId, success: false, error: `Could not get product revision. Got: ${JSON.stringify(Object.keys(current ?? {})).slice(0, 200)}` });
+        results.push({ productId: update.productId, success: false, error: `Could not get product revision. Got keys: ${JSON.stringify(Object.keys(current ?? {})).slice(0, 200)}` });
         continue;
       }
 
@@ -222,14 +225,12 @@ export async function applyEnhancementsToWix(
             .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
             .join('');
 
-      const updatePayload = {
-        revision,
-        name: update.title,
-        plainDescription: htmlDescription,
-      };
+      const updatePayload: Record<string, unknown> = { revision };
+      if (update.title) updatePayload.name = update.title;
+      if (update.description) updatePayload.plainDescription = htmlDescription;
 
       try {
-        await productsV3.updateProduct(update.productId, updatePayload as any);
+        await elevatedProductsV3.updateProduct(update.productId, updatePayload as any);
         results.push({ productId: update.productId, success: true });
       } catch (updateErr: any) {
         const errMsg = updateErr?.message
