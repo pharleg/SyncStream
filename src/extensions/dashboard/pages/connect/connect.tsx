@@ -18,9 +18,13 @@ function connectFetch(path: string, init?: RequestInit): Promise<Response> {
 }
 
 async function callInitiateGmcOAuth(): Promise<string> {
-  const response = await connectFetch('/api/gmc-oauth-init?instanceId=default');
+  const response = await connectFetch('/api/gmc-oauth-init');
+  if (!response.ok) {
+    const text = await response.text();
+    const msg = (() => { try { return (JSON.parse(text) as { error?: string }).error; } catch { return text; } })();
+    throw new Error(msg ?? `OAuth init failed (${response.status})`);
+  }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error);
   return data.authUrl;
 }
 
@@ -28,13 +32,13 @@ async function callGetAppConfig(): Promise<{
   gmcConnected: boolean;
   metaConnected: boolean;
 } | null> {
-  const response = await connectFetch('/api/app-config?instanceId=default');
+  const response = await connectFetch('/api/app-config');
   if (!response.ok) return null;
   return response.json();
 }
 
 async function callGetBillingStatus(): Promise<{ plan: 'free' | 'pro' } | null> {
-  const response = await connectFetch('/api/billing-status?instanceId=default');
+  const response = await connectFetch('/api/billing-status');
   if (!response.ok) return null;
   return response.json();
 }
@@ -43,7 +47,6 @@ async function callCompleteGmcOAuth(): Promise<boolean> {
   try {
     const response = await connectFetch('/api/gmc-complete-oauth', {
       method: 'POST',
-      body: JSON.stringify({ instanceId: 'default' }),
       headers: { 'Content-Type': 'application/json' },
     });
     const data = await response.json();
