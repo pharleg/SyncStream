@@ -1,10 +1,12 @@
 import type { APIRoute } from 'astro';
 import { getCachedProducts, getProductsCacheTimestamp, querySyncStates, getBulkEnhancedContent } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async ({ request }) => {
+export const GET: APIRoute = async () => {
   try {
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get('instanceId') ?? 'default';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
 
     const [products, cacheTimestamp, syncStates] = await Promise.all([
       getCachedProducts(instanceId),

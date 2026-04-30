@@ -1,9 +1,12 @@
 import type { APIRoute } from 'astro';
 import { getSyncProgress } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async ({ url }) => {
+export const GET: APIRoute = async () => {
   try {
-    const instanceId = url.searchParams.get('instanceId') ?? 'default';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const progress = await getSyncProgress(instanceId);
 
     if (!progress) {

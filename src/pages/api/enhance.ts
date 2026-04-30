@@ -2,11 +2,14 @@ import type { APIRoute } from 'astro';
 import { enhanceProducts } from '../../backend/aiEnhancer';
 import { getAppConfig } from '../../backend/dataService';
 import { BillingError } from '../../backend/billingService';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
 
     const config = await getAppConfig(instanceId);
     if (!config) {
@@ -48,8 +51,9 @@ export const POST: APIRoute = async ({ request }) => {
 
 export const GET: APIRoute = async ({ request }) => {
   try {
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get('instanceId') ?? 'default';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
 
     // Import supabase client to count enhanced content
     const { createClient } = await import('@supabase/supabase-js');

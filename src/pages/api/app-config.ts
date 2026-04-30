@@ -5,11 +5,13 @@
 import type { APIRoute } from 'astro';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 import type { FieldMappings } from '../../types/wix.types';
+import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async ({ request }) => {
+export const GET: APIRoute = async () => {
   try {
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get('instanceId') ?? '';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const config = await getAppConfig(instanceId);
 
     return new Response(JSON.stringify(config), {
@@ -27,8 +29,10 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json() as {
-      instanceId: string;
       gmcConnected?: boolean;
       fieldMappings?: Record<string, { type: string; wixField?: string; defaultValue?: string }>;
       syncEnabled?: boolean;
@@ -36,8 +40,6 @@ export const POST: APIRoute = async ({ request }) => {
       aiEnhancementEnabled?: boolean;
       aiEnhancementStyle?: string;
     };
-
-    const instanceId = body.instanceId || 'default';
 
     let config = await getAppConfig(instanceId);
     if (!config) {
@@ -51,9 +53,8 @@ export const POST: APIRoute = async ({ request }) => {
       };
     }
 
-    if (body.gmcConnected !== undefined) {
-      config.gmcConnected = body.gmcConnected;
-    }
+    // gmcConnected is only set by the OAuth completion flow — block direct writes
+    // to prevent a caller falsely marking GMC as connected without valid tokens.
     if (body.fieldMappings !== undefined) {
       config.fieldMappings = body.fieldMappings as FieldMappings;
     }

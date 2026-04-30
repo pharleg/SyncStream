@@ -1,12 +1,16 @@
 // src/pages/api/sync-events.ts
 import type { APIRoute } from 'astro';
 import { getRecentEvents } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const GET: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const url = new URL(request.url);
-    const instanceId = url.searchParams.get('instanceId') ?? '';
-    const limit = parseInt(url.searchParams.get('limit') ?? '10', 10);
+    const rawLimit = parseInt(url.searchParams.get('limit') ?? '10', 10);
+    const limit = Math.min(isNaN(rawLimit) ? 10 : rawLimit, 100);
 
     const events = await getRecentEvents(instanceId, limit);
     return new Response(JSON.stringify({ events }), {

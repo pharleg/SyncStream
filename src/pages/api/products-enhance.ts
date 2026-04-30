@@ -3,11 +3,14 @@ import { getCachedProductsByIds, getAppConfig } from '../../backend/dataService'
 import { enhanceProducts } from '../../backend/aiEnhancer';
 import { BillingError } from '../../backend/billingService';
 import type { WixProduct } from '../../types/wix.types';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
     const productIds: string[] = body.productIds
       ? body.productIds
       : body.productId

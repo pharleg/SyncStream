@@ -8,12 +8,15 @@
  */
 import type { APIRoute } from 'astro';
 import { getBatchOverrideCounts, getBatchGmcOverrides, clearGmcOverride } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const GET: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
     const url = new URL(request.url);
     const rawIds = url.searchParams.get('productIds') ?? '';
-    const productIds = rawIds ? rawIds.split(',').filter(Boolean) : [];
+    const productIds = rawIds ? rawIds.split(',').filter(Boolean).slice(0, 500) : [];
 
     if (productIds.length === 0) {
       return new Response(JSON.stringify({ counts: {}, details: {} }), {
@@ -47,6 +50,9 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const DELETE: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
     const { productId, field } = body;
     if (!productId || !field) {
@@ -54,7 +60,7 @@ export const DELETE: APIRoute = async ({ request }) => {
         status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
-    await clearGmcOverride(productId, field);
+    await clearGmcOverride(productId, field, instanceId);
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' },
     });

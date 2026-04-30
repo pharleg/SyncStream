@@ -91,8 +91,10 @@ export async function handleGmcCallback(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`GMC token exchange failed: ${error}`);
+    const raw = await response.text();
+    const code = (() => { try { return (JSON.parse(raw) as { error?: string }).error ?? 'unknown'; } catch { return 'unknown'; } })();
+    console.error('[oauthService] GMC token exchange failed:', raw);
+    throw new Error(`GMC token exchange failed (${code})`);
   }
 
   const data = (await response.json()) as {
@@ -154,8 +156,10 @@ export async function refreshGmcTokens(
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`GMC token refresh failed: ${error}`);
+    const raw = await response.text();
+    const code = (() => { try { return (JSON.parse(raw) as { error?: string }).error ?? 'unknown'; } catch { return 'unknown'; } })();
+    console.error('[oauthService] GMC token refresh failed:', raw);
+    throw new Error(`GMC token refresh failed (${code})`);
   }
 
   const data = (await response.json()) as {

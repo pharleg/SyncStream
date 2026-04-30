@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { setPlanTier } from '../../backend/billingService';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 
@@ -25,11 +25,12 @@ async function verifyWixSignature(request: Request, rawBody: string): Promise<bo
 
   if (!appSecret) return false;
 
-  const expected = createHmac('sha256', appSecret)
-    .update(rawBody)
-    .digest('base64');
-
-  return expected === signature;
+  const expectedBuf = Buffer.from(
+    createHmac('sha256', appSecret).update(rawBody).digest('base64'),
+  );
+  const sigBuf = Buffer.from(signature);
+  if (expectedBuf.length !== sigBuf.length) return false;
+  return timingSafeEqual(expectedBuf, sigBuf);
 }
 
 /**
@@ -68,7 +69,8 @@ export const POST: APIRoute = async ({ request }) => {
     const eventType = body.eventType ?? '';
     const packageName = body.data?.instance?.billing?.packageName?.toLowerCase() ?? '';
 
-    const tier: 'free' | 'pro' = packageName.includes('pro') ? 'pro' : 'free';
+    const PRO_PLANS = new Set(['pro', 'syncstream-pro', 'syncstream_pro']);
+    const tier: 'free' | 'pro' = PRO_PLANS.has(packageName) ? 'pro' : 'free';
 
     if (
       eventType.includes('upgraded') ||

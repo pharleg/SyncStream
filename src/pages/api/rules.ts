@@ -1,10 +1,12 @@
 import type { APIRoute } from 'astro';
 import { getAllRules, saveRule, deleteRule } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async ({ request }) => {
+export const GET: APIRoute = async () => {
   try {
-    const url = new URL(request.url);
-    const instanceId = url.searchParams.get('instanceId') ?? 'default';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const rules = await getAllRules(instanceId);
     return new Response(JSON.stringify(rules), {
       headers: { 'Content-Type': 'application/json' },
@@ -19,9 +21,12 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
     const id = await saveRule({
-      instanceId: body.instanceId ?? 'default',
+      instanceId,
       name: body.name,
       platform: body.platform ?? 'both',
       field: body.field,
@@ -44,6 +49,9 @@ export const POST: APIRoute = async ({ request }) => {
 
 export const DELETE: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const url = new URL(request.url);
     const id = url.searchParams.get('id');
     if (!id) {
@@ -51,7 +59,7 @@ export const DELETE: APIRoute = async ({ request }) => {
         status: 400, headers: { 'Content-Type': 'application/json' },
       });
     }
-    await deleteRule(id);
+    await deleteRule(id, instanceId);
     return new Response(JSON.stringify({ success: true }), {
       headers: { 'Content-Type': 'application/json' },
     });

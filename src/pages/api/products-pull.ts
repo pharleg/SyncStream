@@ -1,11 +1,14 @@
 import type { APIRoute } from 'astro';
 import { pullProducts } from '../../backend/productCache';
 import { getProductsCacheTimestamp } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
+    await request.json();
 
     const count = await pullProducts(instanceId);
     const cachedAt = await getProductsCacheTimestamp(instanceId);

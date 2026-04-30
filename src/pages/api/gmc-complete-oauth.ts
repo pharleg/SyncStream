@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens } from '../../backend/oauthService';
 import { registerGcpProject, createDataSource } from '../../backend/gmcClient';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 async function getSupabase() {
   const [url, key] = await Promise.all([
@@ -15,7 +16,10 @@ async function getSupabase() {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const { instanceId } = (await request.json()) as { instanceId: string };
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
+    await request.json();
 
     const supabase = await getSupabase();
 

@@ -1,11 +1,14 @@
 import type { APIRoute } from 'astro';
 import { syncFromCache } from '../../backend/syncService';
 import { BillingError } from '../../backend/billingService';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
     const productIds: string[] = body.productIds ?? [];
     const platforms = body.platforms ?? ['gmc'];
 

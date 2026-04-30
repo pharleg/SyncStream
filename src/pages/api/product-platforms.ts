@@ -1,8 +1,11 @@
 import type { APIRoute } from 'astro';
 import { getProductPlatforms, setProductPlatforms } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 /** GET: query platforms for a product. POST: set platforms for one or more products. */
 export const GET: APIRoute = async ({ request }) => {
+  const session = await requireAuth();
+  if (session instanceof Response) return session;
   const url = new URL(request.url);
   const productId = url.searchParams.get('productId');
   if (!productId) {
@@ -19,9 +22,15 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
     const body = await request.json();
     const productIds: string[] = body.productIds;
     const platforms: ('gmc' | 'meta')[] | null = body.platforms;
+
+    if (!Array.isArray(productIds) || productIds.length > 1000) {
+      return new Response(JSON.stringify({ error: 'Invalid productIds' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    }
 
     if (!productIds || productIds.length === 0) {
       return new Response(JSON.stringify({ error: 'productIds required' }), {

@@ -3,11 +3,14 @@ import { getCachedProductsByIds, getAppConfig, getRules } from '../../backend/da
 import { flattenVariants, mapFlattenedToGmc } from '../../backend/productMapper';
 import { applyRules } from '../../backend/rulesEngine';
 import type { WixProduct } from '../../types/wix.types';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
     const productIds: string[] = body.productIds ?? [];
 
     const config = await getAppConfig(instanceId);

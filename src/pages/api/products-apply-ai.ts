@@ -12,11 +12,14 @@ import {
 } from '../../backend/dataService';
 import { enhanceProducts, applyEnhancementsToWix } from '../../backend/aiEnhancer';
 import type { WixProduct } from '../../types/wix.types';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId = body.instanceId ?? 'default';
 
     // Mode 1: Preview — generate enhancements and return before/after
     if (body.productIds && !body.updates) {

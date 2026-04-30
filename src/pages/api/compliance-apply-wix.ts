@@ -11,11 +11,15 @@
 import type { APIRoute } from 'astro';
 import { applyEnhancementsToWix } from '../../backend/aiEnhancer';
 import { updateCachedProductFields } from '../../backend/dataService';
+import { requireAuth } from '../../lib/requireAuth';
 
 const WIX_FIXABLE_FIELDS = new Set(['title', 'description']);
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
     const productId: string = body.productId;
     // Accept both array [{ field, value }] and object { field: value } formats
@@ -45,7 +49,7 @@ export const POST: APIRoute = async ({ request }) => {
       description: fields.description ?? '',
     }].filter((u) => u.title || u.description);
 
-    const wixResults = await applyEnhancementsToWix('default', updates);
+    const wixResults = await applyEnhancementsToWix(instanceId, updates);
 
     // Update products cache for successful writes
     for (const result of wixResults) {
@@ -58,7 +62,7 @@ export const POST: APIRoute = async ({ request }) => {
             cacheUpdates.description = update.description;
             cacheUpdates.plainDescription = update.description;
           }
-          await updateCachedProductFields('default', result.productId, cacheUpdates);
+          await updateCachedProductFields(instanceId, result.productId, cacheUpdates);
         }
       }
     }

@@ -334,6 +334,7 @@ export async function runFullSync(
     : await fetchAllProducts();
 
   const products = allProducts.slice(0, MAX_PRODUCTS_PER_SYNC);
+  await checkSyncLimit(instanceId, products.length);
   return syncProductChunk(instanceId, products, options.platforms);
 }
 

@@ -15,11 +15,14 @@
 import type { APIRoute } from 'astro';
 import { getAppConfig, saveAppConfig, updateCachedProductFields, getCachedProductsByIds } from '../../backend/dataService';
 import { applyEnhancementsToWix } from '../../backend/aiEnhancer';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId: string = body.instanceId ?? 'default';
 
     // ── Product fix: write title/description to Wix ──────────────────────
     if (body.type === 'product') {

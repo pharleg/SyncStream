@@ -7,16 +7,19 @@ import type { APIRoute } from 'astro';
 import { runPaginatedSync } from '../../backend/syncService';
 import { BillingError } from '../../backend/billingService';
 import type { Platform } from '../../types/sync.types';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = (await request.json()) as {
-      instanceId: string;
       platforms?: Platform[];
     };
 
     const result = await runPaginatedSync(
-      body.instanceId,
+      instanceId,
       body.platforms ?? ['gmc'],
     );
 

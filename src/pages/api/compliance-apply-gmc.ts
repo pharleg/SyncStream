@@ -12,11 +12,15 @@ import type { APIRoute } from 'astro';
 import { upsertGmcOverrides } from '../../backend/dataService';
 import { syncFromCache } from '../../backend/syncService';
 import { BillingError } from '../../backend/billingService';
+import { requireAuth } from '../../lib/requireAuth';
 
 const GMC_OVERRIDE_FIELDS = new Set(['brand', 'condition', 'link', 'imageLink']);
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
     const productId: string = body.productId;
     const rawFixes: Array<{ field: string; value: string }> = body.fixes ?? [];
@@ -38,7 +42,7 @@ export const POST: APIRoute = async ({ request }) => {
     const stored = 1;
 
     // Trigger targeted sync for this product
-    const syncResult = await syncFromCache('default', [productId], ['gmc']);
+    const syncResult = await syncFromCache(instanceId, [productId], ['gmc']);
 
     return new Response(JSON.stringify({
       stored,

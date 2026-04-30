@@ -221,9 +221,9 @@ export async function saveRule(rule: Omit<SyncRule, 'id'> & { id?: string }): Pr
   return data.id;
 }
 
-export async function deleteRule(ruleId: string): Promise<void> {
+export async function deleteRule(ruleId: string, instanceId: string): Promise<void> {
   const db = await getClient();
-  const { error } = await db.from('sync_rules').delete().eq('id', ruleId);
+  const { error } = await db.from('sync_rules').delete().eq('id', ruleId).eq('instance_id', instanceId);
   if (error) throw new Error(`Failed to delete rule: ${error.message}`);
 }
 
@@ -280,9 +280,9 @@ export async function saveFilter(filter: Omit<SyncFilter, 'id'> & { id?: string 
   return data.id;
 }
 
-export async function deleteFilter(filterId: string): Promise<void> {
+export async function deleteFilter(filterId: string, instanceId: string): Promise<void> {
   const db = await getClient();
-  const { error } = await db.from('sync_filters').delete().eq('id', filterId);
+  const { error } = await db.from('sync_filters').delete().eq('id', filterId).eq('instance_id', instanceId);
   if (error) throw new Error(`Failed to delete filter: ${error.message}`);
 }
 
@@ -745,13 +745,15 @@ export async function upsertGmcOverrides(
 export async function clearGmcOverride(
   productId: string,
   fieldName: string,
+  instanceId: string,
 ): Promise<void> {
   const db = await getClient();
   const { error } = await db
     .from('gmc_field_overrides')
     .delete()
     .eq('product_id', productId)
-    .eq('field_name', fieldName);
+    .eq('field_name', fieldName)
+    .eq('instance_id', instanceId);
 
   if (error) throw new Error(`Failed to clear GMC override: ${error.message}`);
 }

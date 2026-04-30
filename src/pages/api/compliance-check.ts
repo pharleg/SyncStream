@@ -2,11 +2,14 @@ import type { APIRoute } from 'astro';
 import { getCachedProducts, getCachedProductsByIds } from '../../backend/dataService';
 import { runComplianceCheck } from '../../backend/validator';
 import type { WixProduct } from '../../types/wix.types';
+import { requireAuth } from '../../lib/requireAuth';
 
 export const POST: APIRoute = async ({ request }) => {
   try {
+    const session = await requireAuth();
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
     const body = await request.json();
-    const instanceId: string = body.instanceId ?? 'default';
     const platform: 'gmc' | 'meta' = body.platform ?? 'gmc';
     const productIds: string[] | undefined = body.productIds;
 
