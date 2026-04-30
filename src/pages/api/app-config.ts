@@ -7,9 +7,9 @@ import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 import type { FieldMappings } from '../../types/wix.types';
 import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const { instanceId } = session;
     const config = await getAppConfig(instanceId);
@@ -29,7 +29,7 @@ export const GET: APIRoute = async () => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const { instanceId } = session;
     const body = await request.json() as {

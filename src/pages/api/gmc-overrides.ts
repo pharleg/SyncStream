@@ -12,7 +12,7 @@ import { requireAuth } from '../../lib/requireAuth';
 
 export const GET: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const url = new URL(request.url);
     const rawIds = url.searchParams.get('productIds') ?? '';
@@ -50,7 +50,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const DELETE: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const { instanceId } = session;
     const body = await request.json();

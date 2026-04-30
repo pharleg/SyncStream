@@ -2,9 +2,9 @@ import type { APIRoute } from 'astro';
 import { getCreditBalance, getPlan } from '../../backend/billingService';
 import { requireAuth } from '../../lib/requireAuth';
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const { instanceId } = session;
 

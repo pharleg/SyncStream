@@ -1,5 +1,3 @@
-import { auth } from '@wix/essentials';
-
 export interface AuthSession {
   instanceId: string;
 }
@@ -12,19 +10,30 @@ function unauthorized(): Response {
 }
 
 /**
- * Verifies the Wix instance token sent by httpClient.fetchWithAuth.
- * Returns { instanceId } on success, or a 401 Response on failure.
- * All API routes must call this before processing any request.
+ * Verifies the Wix instance token from the Authorization header.
  *
- * Creates a fresh Response each call — Cloudflare Workers Response body
- * streams can only be consumed once; a module-level singleton would return
- * an empty body on the second request through the same isolate.
+ * auth.getTokenInfo() from @wix/essentials uses a different @wix/sdk-runtime
+ * instance than @wix/astro's middleware, so the async-local-storage context
+ * set by the middleware is invisible to it. We call the Wix token-info endpoint
+ * directly instead — same network call the middleware makes via auth.elevated().
  */
-export async function requireAuth(): Promise<AuthSession | Response> {
+export async function requireAuth(request: Request): Promise<AuthSession | Response> {
+  const authorization = request.headers.get('Authorization');
+  if (!authorization) return unauthorized();
+
   try {
-    const tokenInfo = await auth.getTokenInfo();
-    if (!tokenInfo.instanceId) return unauthorized();
-    return { instanceId: tokenInfo.instanceId };
+    const res = await fetch('https://www.wixapis.com/oauth2/token-info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: authorization }),
+    });
+
+    if (!res.ok) return unauthorized();
+
+    const info = await res.json() as { instanceId?: string; active?: boolean };
+    if (!info.active || !info.instanceId) return unauthorized();
+
+    return { instanceId: info.instanceId };
   } catch {
     return unauthorized();
   }

@@ -4,7 +4,7 @@ import { requireAuth } from '../../lib/requireAuth';
 
 /** GET: query platforms for a product. POST: set platforms for one or more products. */
 export const GET: APIRoute = async ({ request }) => {
-  const session = await requireAuth();
+  const session = await requireAuth(request);
   if (session instanceof Response) return session;
   const url = new URL(request.url);
   const productId = url.searchParams.get('productId');
@@ -22,7 +22,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 export const POST: APIRoute = async ({ request }) => {
   try {
-    const session = await requireAuth();
+    const session = await requireAuth(request);
     if (session instanceof Response) return session;
     const body = await request.json();
     const productIds: string[] = body.productIds;
