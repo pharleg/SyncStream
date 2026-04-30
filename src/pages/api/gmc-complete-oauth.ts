@@ -19,7 +19,6 @@ export const POST: APIRoute = async ({ request }) => {
     const session = await requireAuth();
     if (session instanceof Response) return session;
     const { instanceId } = session;
-    await request.json();
 
     const supabase = await getSupabase();
 
