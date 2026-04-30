@@ -199,10 +199,10 @@ export async function applyEnhancementsToWix(
   instanceId: string,
   productUpdates: Array<{ productId: string; title: string; description: string }>,
 ): Promise<Array<{ productId: string; success: boolean; error?: string }>> {
-  const { elevate } = await import('@wix/essentials/auth');
+  const { auth } = await import('@wix/essentials');
   const { productsV3 } = await import('@wix/stores');
-  // elevate() gives the app's backend credentials — required to write Wix products from an API route
-  const elevatedProductsV3 = elevate(productsV3);
+  // auth.elevate() gives the app's backend credentials — required to write Wix products from an API route
+  const elevatedProductsV3 = auth.elevate(productsV3);
   const results: Array<{ productId: string; success: boolean; error?: string }> = [];
 
   for (const update of productUpdates) {
