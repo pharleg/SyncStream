@@ -28,14 +28,19 @@ async function upsertSecret(name: string, value: string): Promise<void> {
 /** In-memory cache for secrets within a single request. */
 const _secretCache = new Map<string, string>();
 
-/** Get a secret value by name, with in-request caching. */
+/** Get a secret value by name, with in-request caching. Returns '' if secret doesn't exist. */
 async function getSecret(name: string): Promise<string> {
   const cached = _secretCache.get(name);
   if (cached !== undefined) return cached;
-  const result = await secrets.getSecretValue(name);
-  const value = result.value ?? '';
-  _secretCache.set(name, value);
-  return value;
+  try {
+    const result = await secrets.getSecretValue(name);
+    const value = result.value ?? '';
+    _secretCache.set(name, value);
+    return value;
+  } catch {
+    _secretCache.set(name, '');
+    return '';
+  }
 }
 
 let _credentialsCache: { clientId: string; clientSecret: string; redirectUri: string } | null = null;
@@ -104,17 +109,21 @@ export async function handleGmcCallback(
   };
 
   await upsertSecret(
-    `gmc_access_token_${instanceId}`,
+    `gmc_at_${instanceId}`,
     data.access_token,
   );
   await upsertSecret(
-    `gmc_refresh_token_${instanceId}`,
+    `gmc_rt_${instanceId}`,
     data.refresh_token,
   );
   await upsertSecret(
-    `gmc_token_expiry_${instanceId}`,
+    `gmc_exp_${instanceId}`,
     String(Date.now() + data.expires_in * 1000),
   );
+}
+
+export async function storeMerchantId(instanceId: string, merchantId: string): Promise<void> {
+  await upsertSecret(`gmc_mid_${instanceId}`, merchantId);
 }
 
 export async function getGmcTokens(
@@ -122,10 +131,10 @@ export async function getGmcTokens(
 ): Promise<GmcTokens> {
   const [accessToken, refreshToken, expiresAtStr, merchantId] =
     await Promise.all([
-      getSecret(`gmc_access_token_${instanceId}`),
-      getSecret(`gmc_refresh_token_${instanceId}`),
-      getSecret(`gmc_token_expiry_${instanceId}`),
-      getSecret(`gmc_merchant_id_${instanceId}`),
+      getSecret(`gmc_at_${instanceId}`),
+      getSecret(`gmc_rt_${instanceId}`),
+      getSecret(`gmc_exp_${instanceId}`),
+      getSecret(`gmc_mid_${instanceId}`),
     ]);
 
   return {
@@ -141,7 +150,7 @@ export async function refreshGmcTokens(
 ): Promise<string> {
   const { clientId, clientSecret } = await getGmcClientCredentials();
   const refreshToken = await getSecret(
-    `gmc_refresh_token_${instanceId}`,
+    `gmc_rt_${instanceId}`,
   );
 
   const response = await fetch(GMC_TOKEN_URL, {
@@ -168,11 +177,11 @@ export async function refreshGmcTokens(
   };
 
   await upsertSecret(
-    `gmc_access_token_${instanceId}`,
+    `gmc_at_${instanceId}`,
     data.access_token,
   );
   await upsertSecret(
-    `gmc_token_expiry_${instanceId}`,
+    `gmc_exp_${instanceId}`,
     String(Date.now() + data.expires_in * 1000),
   );
 
