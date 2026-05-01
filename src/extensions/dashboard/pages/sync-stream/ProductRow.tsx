@@ -89,8 +89,14 @@ const ExpandedPanel: FC<{
 
   const isMultiVariant = (product.variants?.length ?? 0) > 1;
 
+  // Always surface SKU fix when product has no SKU — don't wait for GMC to flag it
+  const hasNoSku = !product.sku && (isMultiVariant ? product.variants?.every((v) => !v.sku) : true);
+  const fixableFieldsWithSku = hasNoSku && !uniqueFixableFields.includes('offerId')
+    ? [...uniqueFixableFields, 'offerId']
+    : uniqueFixableFields;
+
   const initialValues: Record<string, string> = {};
-  for (const field of uniqueFixableFields) {
+  for (const field of fixableFieldsWithSku) {
     if (field === 'brand') initialValues[field] = product.brand ?? '';
     else if (field === 'description') initialValues[field] = product.description ?? '';
     else if (field === 'title') initialValues[field] = product.name;
@@ -159,10 +165,10 @@ const ExpandedPanel: FC<{
       {/* Column 1: Fix inputs */}
       <Box direction="vertical" style={{ flex: 1 }} gap="8px">
         <Text size="small" weight="bold">Fix Issues</Text>
-        {uniqueFixableFields.length === 0 && (
+        {fixableFieldsWithSku.length === 0 && (
           <Text size="small" secondary>No directly fixable fields.</Text>
         )}
-        {uniqueFixableFields.map((field) => {
+        {fixableFieldsWithSku.map((field) => {
           if (field === 'offerId' && isMultiVariant && product.variants) {
             return (
               <Box key="offerId" direction="vertical" gap="4px">
@@ -189,7 +195,7 @@ const ExpandedPanel: FC<{
             </FormField>
           );
         })}
-        {uniqueFixableFields.length > 0 && (
+        {fixableFieldsWithSku.length > 0 && (
           <Box gap="8px" marginTop="4px">
             <Button size="small" skin="light" onClick={() => handleApply('wix')} disabled={applying}>
               Apply to Wix
@@ -362,17 +368,11 @@ export const ProductRow: FC<ProductRowProps> = ({
           </Text>
         </Box>
 
-        {/* AI toggle */}
+        {/* AI status */}
         <Box gap="6px" verticalAlign="middle" style={{ width: 88, flexShrink: 0 }} paddingTop="2px">
-          <ToggleSwitch
-            size="small"
-            checked={product.aiEnabled}
-            onChange={(e) => {
-              e.stopPropagation();
-              onToggleAI(product.productId, e.target.checked).catch(() => {});
-            }}
-          />
-          <Text size="tiny" secondary>{product.aiEnabled ? 'On' : 'Off'}</Text>
+          <Text size="tiny" secondary style={{ color: product.enhancedDescription ? '#3b5bdb' : undefined }}>
+            {product.enhancedDescription ? '✦ Enhanced' : 'Not enhanced'}
+          </Text>
         </Box>
 
         {/* Action */}

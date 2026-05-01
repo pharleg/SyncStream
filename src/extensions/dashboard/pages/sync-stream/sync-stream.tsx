@@ -1405,7 +1405,7 @@ const DashboardTab: FC<{
         {/* Still show the Sync Now button so they can re-sync after fixing */}
         <Box>
           <Button onClick={handleSync} disabled={syncing} size="small" skin="light">
-            {syncing ? 'Syncing…' : 'Sync Now'}
+            {syncing ? 'Syncing…' : 'Sync to Channels'}
           </Button>
         </Box>
         {error && <SectionHelper appearance="danger">{error}</SectionHelper>}

@@ -202,7 +202,7 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
       {/* Action buttons */}
       <Box gap="8px">
         <Button onClick={onSyncNow} disabled={syncing}>
-          {syncing ? <Loader size="tiny" /> : 'Sync Now'}
+          {syncing ? <Loader size="tiny" /> : 'Sync to Channels'}
         </Button>
         {stats.failed > 0 && (
           <Button
