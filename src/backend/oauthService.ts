@@ -35,10 +35,10 @@ async function getSecret(name: string): Promise<string> {
   try {
     const result = await secrets.getSecretValue(name);
     const value = result.value ?? '';
-    _secretCache.set(name, value);
+    if (value) _secretCache.set(name, value);
     return value;
   } catch {
-    _secretCache.set(name, '');
+    // Do not cache missing secrets — they may be created later in the same warm worker
     return '';
   }
 }
