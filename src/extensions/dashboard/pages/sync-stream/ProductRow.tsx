@@ -8,12 +8,19 @@ export interface ProductIssue {
   severity: 'error' | 'warning';
 }
 
+export interface ProductVariant {
+  variantId: string;
+  label: string;
+  sku?: string;
+}
+
 export interface ProductRowData {
   productId: string;
   name: string;
   imageUrl?: string;
   sku?: string;
   variantCount: number;
+  variants?: ProductVariant[];
   price?: string;
   availability?: string;
   brand?: string;
@@ -80,14 +87,23 @@ const ExpandedPanel: FC<{
   const fixableIssues = allIssues.filter((i) => FIXABLE_FIELDS.includes(i.field));
   const uniqueFixableFields = [...new Set(fixableIssues.map((i) => i.field))];
 
+  const isMultiVariant = (product.variants?.length ?? 0) > 1;
+
   const initialValues: Record<string, string> = {};
   for (const field of uniqueFixableFields) {
     if (field === 'brand') initialValues[field] = product.brand ?? '';
     else if (field === 'description') initialValues[field] = product.description ?? '';
     else if (field === 'title') initialValues[field] = product.name;
     else if (field === 'imageLink') initialValues[field] = product.imageUrl ?? '';
-    else if (field === 'offerId') initialValues[field] = product.sku ?? '';
-    else initialValues[field] = '';
+    else if (field === 'offerId') {
+      if (isMultiVariant && product.variants) {
+        for (const v of product.variants) {
+          initialValues[`variantSku_${v.variantId}`] = v.sku ?? '';
+        }
+      } else {
+        initialValues[field] = product.sku ?? '';
+      }
+    } else initialValues[field] = '';
   }
 
   const [fixValues, setFixValues] = useState<Record<string, string>>(initialValues);
@@ -146,15 +162,33 @@ const ExpandedPanel: FC<{
         {uniqueFixableFields.length === 0 && (
           <Text size="small" secondary>No directly fixable fields.</Text>
         )}
-        {uniqueFixableFields.map((field) => (
-          <FormField key={field} label={field.charAt(0).toUpperCase() + field.slice(1)}>
-            <Input
-              size="small"
-              value={fixValues[field] ?? ''}
-              onChange={(e) => setFixValues((v) => ({ ...v, [field]: e.target.value }))}
-            />
-          </FormField>
-        ))}
+        {uniqueFixableFields.map((field) => {
+          if (field === 'offerId' && isMultiVariant && product.variants) {
+            return (
+              <Box key="offerId" direction="vertical" gap="4px">
+                <Text size="tiny" weight="bold" secondary>SKU per variant</Text>
+                {product.variants.map((v) => (
+                  <FormField key={v.variantId} label={v.label}>
+                    <Input
+                      size="small"
+                      value={fixValues[`variantSku_${v.variantId}`] ?? ''}
+                      onChange={(e) => setFixValues((vals) => ({ ...vals, [`variantSku_${v.variantId}`]: e.target.value }))}
+                    />
+                  </FormField>
+                ))}
+              </Box>
+            );
+          }
+          return (
+            <FormField key={field} label={field === 'offerId' ? 'SKU' : field.charAt(0).toUpperCase() + field.slice(1)}>
+              <Input
+                size="small"
+                value={fixValues[field] ?? ''}
+                onChange={(e) => setFixValues((v) => ({ ...v, [field]: e.target.value }))}
+              />
+            </FormField>
+          );
+        })}
         {uniqueFixableFields.length > 0 && (
           <Box gap="8px" marginTop="4px">
             <Button size="small" skin="light" onClick={() => handleApply('wix')} disabled={applying}>

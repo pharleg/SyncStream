@@ -1013,6 +1013,17 @@ const ProductsTab: FC<{
           imageUrl: p.imageUrl as string | undefined,
           sku: (p.productData?.sku ?? undefined) as string | undefined,
           variantCount: (p.variantCount ?? 1) as number,
+          variants: (() => {
+            const rawVariants: any[] = p.productData?.variantsInfo?.variants ?? [];
+            if (rawVariants.length <= 1) return undefined;
+            return rawVariants.map((v: any) => ({
+              variantId: v._id ?? v.id,
+              sku: v.sku ?? undefined,
+              label: (v.choices ?? [])
+                .map((c: any) => `${c.optionChoiceName?.optionName ?? c.optionName ?? '?'}: ${c.optionChoiceName?.choiceName ?? c.choiceName ?? '?'}`)
+                .join(' / ') || `Variant ${v._id?.slice(-4) ?? ''}`,
+            }));
+          })(),
           price: p.price as string | undefined,
           availability: p.availability as string | undefined,
           brand: p.brand as string | undefined,
