@@ -1048,20 +1048,32 @@ const ProductsTab: FC<{
   }, [loadProducts]);
 
   const handleApplyFix = useCallback(async ({ productId, fixes, target }: ApplyFixPayload) => {
+    const checkResponse = async (res: Response, label: string) => {
+      if (!res.ok) {
+        let msg = `${label} failed (${res.status})`;
+        try { const body = await res.json() as { error?: string }; if (body.error) msg = body.error; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const body = await res.json() as { applied?: number; failed?: number; results?: Array<{ productId: string; success: boolean; error?: string }> };
+      const failed = body.results?.filter((r) => !r.success) ?? [];
+      if (failed.length > 0) throw new Error(failed[0].error ?? `${label}: product update failed`);
+    };
     if (target === 'wix' || target === 'both') {
-      await appFetch('/api/compliance-apply-wix', {
+      const res = await appFetch('/api/compliance-apply-wix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceId: 'default', productId, fixes }),
       });
+      await checkResponse(res, 'Apply to Wix');
     }
     if (target === 'gmc' || target === 'both') {
       const entries = Object.entries(fixes).map(([field, value]) => ({ field, value }));
-      await appFetch('/api/compliance-apply-gmc', {
+      const res = await appFetch('/api/compliance-apply-gmc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ instanceId: 'default', productId, fixes: entries }),
       });
+      await checkResponse(res, 'Apply to GMC');
     }
     await loadProducts();
   }, [loadProducts]);
@@ -1679,11 +1691,14 @@ const SyncStreamPage: FC = () => {
   const loadConfig = useCallback(async () => {
     try {
       // Complete pending GMC OAuth if present — no-op if no pending code (fast Supabase read)
-      await appFetch('/api/gmc-complete-oauth', {
+      const oauthRes = await appFetch('/api/gmc-complete-oauth', {
         method: 'POST',
-        body: JSON.stringify({ instanceId: 'default' }),
         headers: { 'Content-Type': 'application/json' },
-      }).catch(() => {});
+      }).catch((e: unknown) => { console.error('[SyncStream] gmc-complete-oauth fetch error:', e); return null; });
+      if (oauthRes && !oauthRes.ok) {
+        const oauthBody = await oauthRes.json().catch(() => ({})) as Record<string, unknown>;
+        console.error('[SyncStream] gmc-complete-oauth failed:', oauthRes.status, oauthBody);
+      }
 
       const [configRes, billingRes] = await Promise.all([
         appFetch('/api/app-config?instanceId=default'),
