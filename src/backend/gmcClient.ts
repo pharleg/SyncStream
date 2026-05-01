@@ -164,6 +164,22 @@ export async function batchInsertProducts(
  * Register the GCP project with Merchant API.
  * Must be called once per GCP project before using v1 APIs.
  */
+/**
+ * Fetch the merchant's GMC account ID using Merchant API v1beta accounts list.
+ * Returns the first account ID found.
+ */
+export async function fetchMerchantId(accessToken: string): Promise<string> {
+  const data = await gmcFetch<{ accounts?: { name: string }[] }>(
+    '/accounts/v1beta/accounts',
+    accessToken,
+  );
+  const name = data.accounts?.[0]?.name;
+  if (!name) throw new Error('No GMC merchant account found for this Google account');
+  // name format: "accounts/123456789"
+  const parts = name.split('/');
+  return parts[parts.length - 1];
+}
+
 export async function registerGcpProject(
   merchantId: string,
   accessToken: string,
