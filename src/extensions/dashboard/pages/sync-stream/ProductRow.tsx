@@ -1,5 +1,5 @@
 // src/extensions/dashboard/pages/sync-stream/ProductRow.tsx
-import { type FC, useState } from 'react';
+import { type FC, useState, useEffect } from 'react';
 import { Box, Text, Button, Input, FormField, ToggleSwitch, Loader } from '@wix/design-system';
 
 export interface ProductIssue {
@@ -94,8 +94,12 @@ const ExpandedPanel: FC<{
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [enhancing, setEnhancing] = useState(false);
-  // Local AI preview — mirrors persisted state but toggles description preview immediately
-  const [aiPreview, setAiPreview] = useState(product.aiEnabled);
+  // Auto-enable preview when enhanced description exists (handles post-enhance reload)
+  const [aiPreview, setAiPreview] = useState(product.aiEnabled || !!product.enhancedDescription);
+
+  useEffect(() => {
+    if (product.enhancedDescription) setAiPreview(true);
+  }, [product.enhancedDescription]);
 
   const handleApply = async (target: 'wix' | 'gmc' | 'both', overrideFixes?: Record<string, string>) => {
     setApplying(true);
