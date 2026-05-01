@@ -30,10 +30,13 @@ export async function requireAuth(request: Request): Promise<AuthSession | Respo
 
     if (!res.ok) return unauthorized();
 
-    const info = await res.json() as { instanceId?: string; active?: boolean };
-    if (!info.active || !info.instanceId) return unauthorized();
+    const info = await res.json() as { instanceId?: string; siteId?: string; active?: boolean };
+    // instanceId is only present for APP tokens; USER tokens have siteId instead.
+    // Use whichever is available — both uniquely identify the installation context.
+    const instanceId = info.instanceId ?? info.siteId;
+    if (!info.active || !instanceId) return unauthorized();
 
-    return { instanceId: info.instanceId };
+    return { instanceId };
   } catch {
     return unauthorized();
   }
