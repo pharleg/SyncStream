@@ -170,7 +170,7 @@ export async function batchInsertProducts(
  */
 export async function fetchMerchantId(accessToken: string): Promise<string> {
   const data = await gmcFetch<{ accounts?: { name: string }[] }>(
-    '/accounts/v1beta/accounts',
+    '/accounts/v1/accounts',
     accessToken,
   );
   const name = data.accounts?.[0]?.name;
