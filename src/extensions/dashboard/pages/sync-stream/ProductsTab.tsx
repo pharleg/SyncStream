@@ -15,6 +15,7 @@ interface ProductsTabProps {
   config: { gmcConnected: boolean; metaConnected: boolean } | null;
   onSyncNow: () => Promise<void>;
   onCheckCompliance: () => Promise<void>;
+  onRefreshFromWix: () => Promise<void>;
   onApplyFix: (payload: ApplyFixPayload) => Promise<void>;
   onToggleAI: (productId: string, enabled: boolean) => Promise<void>;
   onEnhanceNow: (productId: string) => Promise<void>;
@@ -30,6 +31,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   config,
   onSyncNow,
   onCheckCompliance,
+  onRefreshFromWix,
   onApplyFix,
   onToggleAI,
   onEnhanceNow,
@@ -41,6 +43,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const syncBlocked = billingStatus?.plan === 'free' && products.length > 50;
 
@@ -86,6 +89,11 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   const handleCheckCompliance = async () => {
     setChecking(true);
     try { await onCheckCompliance(); } finally { setChecking(false); }
+  };
+
+  const handleRefreshFromWix = async () => {
+    setRefreshing(true);
+    try { await onRefreshFromWix(); } finally { setRefreshing(false); }
   };
 
   const filterTabStyle = (tab: FilterTab): CSSProperties => ({
@@ -166,11 +174,14 @@ export const ProductsTab: FC<ProductsTabProps> = ({
             onChange={(e) => setSearch(e.target.value)}
           />
         </Box>
+        <Button size="small" skin="light" onClick={handleRefreshFromWix} disabled={refreshing}>
+          {refreshing ? <Loader size="tiny" /> : 'Refresh from Wix'}
+        </Button>
         <Button size="small" skin="light" onClick={handleCheckCompliance} disabled={checking}>
-          {checking ? <Loader size="tiny" /> : 'Check All'}
+          {checking ? <Loader size="tiny" /> : 'Check Compliance'}
         </Button>
         <Button size="small" onClick={handleSyncNow} disabled={syncing || syncBlocked}>
-          {syncing ? <Loader size="tiny" /> : 'Sync Now'}
+          {syncing ? <Loader size="tiny" /> : 'Push to GMC'}
         </Button>
       </Box>
 

@@ -1058,6 +1058,15 @@ const ProductsTab: FC<{
     await loadProducts();
   }, [loadProducts]);
 
+  const handleRefreshFromWix = useCallback(async () => {
+    await appFetch('/api/products-pull', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instanceId: 'default' }),
+    });
+    await loadProducts();
+  }, [loadProducts]);
+
   const handleApplyFix = useCallback(async ({ productId, fixes, target }: ApplyFixPayload) => {
     const checkResponse = async (res: Response, label: string) => {
       if (!res.ok) {
@@ -1114,6 +1123,7 @@ const ProductsTab: FC<{
       config={config}
       onSyncNow={handleSyncNow}
       onCheckCompliance={handleCheckCompliance}
+      onRefreshFromWix={handleRefreshFromWix}
       onApplyFix={handleApplyFix}
       onToggleAI={handleToggleAI}
       onEnhanceNow={handleEnhanceNow}
