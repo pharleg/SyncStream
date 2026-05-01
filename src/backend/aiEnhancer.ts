@@ -201,14 +201,14 @@ export async function applyEnhancementsToWix(
 ): Promise<Array<{ productId: string; success: boolean; error?: string }>> {
   const { auth } = await import('@wix/essentials');
   const { productsV3 } = await import('@wix/stores');
-  // auth.elevate() gives the app's backend credentials — required to write Wix products from an API route
-  const elevatedProductsV3 = auth.elevate(productsV3);
+  // auth.elevate() only wraps write methods — use plain productsV3 for reads
+  const elevatedUpdateProduct = auth.elevate(productsV3.updateProduct);
   const results: Array<{ productId: string; success: boolean; error?: string }> = [];
 
   for (const update of productUpdates) {
     try {
       // Fetch current product to get revision (required by V3 API)
-      const current = await elevatedProductsV3.getProduct(update.productId) as any;
+      const current = await productsV3.getProduct(update.productId) as any;
       const revision = current?.revision;
 
       if (!revision) {
@@ -230,7 +230,7 @@ export async function applyEnhancementsToWix(
       if (update.description) updatePayload.plainDescription = htmlDescription;
 
       try {
-        await elevatedProductsV3.updateProduct(update.productId, updatePayload as any);
+        await elevatedUpdateProduct(update.productId, updatePayload as any);
         results.push({ productId: update.productId, success: true });
       } catch (updateErr: any) {
         const errMsg = updateErr?.message
