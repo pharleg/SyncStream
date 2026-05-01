@@ -181,7 +181,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
           {checking ? <Loader size="tiny" /> : 'Check Compliance'}
         </Button>
         <Button size="small" onClick={handleSyncNow} disabled={syncing || syncBlocked}>
-          {syncing ? <Loader size="tiny" /> : 'Push to GMC'}
+          {syncing ? <Loader size="tiny" /> : 'Sync to Channels'}
         </Button>
       </Box>
 
