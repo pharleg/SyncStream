@@ -10,7 +10,7 @@
 
 | File | Action |
 |------|--------|
-| `status.tsx` + `status.extension.ts` | Delete — dead code, not in nav |
+| `status.tsx` + `status.extension.ts` | Delete — dead code, not in nav, not imported in extensions.ts |
 | `connect.tsx` | Fix auth, remove Meta gate, debug leak, upgrade URL |
 | `settings.tsx` | Fix auth, rename labels, add AI credit estimate |
 | `mapping.tsx` | Fix auth, Rules field dropdown, Add Rule UX |
@@ -25,16 +25,20 @@ No new pages. No new API routes except one small addition to `/api/enhance` GET.
 
 Both files currently use raw `fetch()` — unauthenticated calls that bypass Wix instance validation.
 
-**Fix:** Add a local `appFetch` helper at the top of each file (mirrors `connectFetch` in connect.tsx):
+**Create `src/lib/appFetch.ts`** (shared, exported — do not duplicate per-file):
 
 ```ts
-function appFetch(path: string, init?: RequestInit): Promise<Response> {
+import { httpClient } from '@wix/essentials';
+
+export function appFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = new URL(path, new URL(import.meta.url).origin).toString();
   return httpClient.fetchWithAuth(url, init);
 }
 ```
 
-All `fetch('/api/...')` calls switch to `appFetch('/api/...')`. Remove `instanceId: 'default'` from all request bodies — the backend reads instanceId from the Wix auth token.
+Import and use in settings.tsx and mapping.tsx. All `fetch('/api/...')` calls switch to `appFetch('/api/...')`.
+
+**Remove `instanceId: 'default'` from all request bodies** — confirmed safe. All three affected routes (app-config, rules, filters) read instanceId from `session` (the Wix auth token), never from the request body. The body value was always ignored.
 
 ---
 
@@ -65,7 +69,13 @@ While Meta OAuth is not yet wired (T-001 not shipped), Meta card shows a "COMING
 <Text size="small" skin="success" weight="bold">Connected</Text>
 ```
 
-Use a feature flag or env variable to toggle between badge and real button when T-001 ships — no second deploy needed.
+Toggle between badge and real button via a constant in `src/lib/constants.ts`:
+
+```ts
+export const META_OAUTH_ENABLED = false; // flip to true when T-001 ships
+```
+
+No second deploy needed — just flip the constant.
 
 ### Upgrade URL
 Replace `window.open('https://manage.wix.com/app-market', '_blank')` with a shared constant:
@@ -140,7 +150,7 @@ Replace inline styles with WDS `SectionHelper` (matches ProductsTab treatment).
 Replace raw `<button>` elements + `filterTabStyle` function with WDS `SegmentedToggle`. Remove the entire `filterTabStyle` function and all hardcoded hex color logic.
 
 ### Table header
-Replace CSS `display:grid` with manual pixel columns + raw `<Text>` spans. Use WDS `Table` component with proper column definitions. ProductRow already renders inside the list — wire it as `Table.Content` rows.
+ProductRow has complex expand/collapse state that doesn't fit WDS Table's column model — do not refactor ProductRow. Instead: replace the raw `<Text secondary>` column label spans in the header row with WDS `Text size="tiny" secondary weight="bold"`. Keep the existing CSS grid layout for the header. This satisfies WDS compliance without a full ProductRow rewrite.
 
 ### Billing banner (syncBlocked)
 Replace inline-styled warning box with WDS `SectionHelper appearance="warning"` with title "Catalog limit reached" and body explaining the limit + Upgrade button.
@@ -174,14 +184,22 @@ Remove the toggle behavior (Add Rule button currently opens AND closes the form)
 Same fix applied to Add Filter.
 
 ### Type: expression
-Replace `expression: any` in `SyncRule` type with a proper discriminated union:
+`src/types/rules.types.ts` already defines correct types (`SyncRule`, `SyncFilter`, `RuleExpression` with `static | concatenate | calculator`). mapping.tsx redefines these locally with `expression: any` — remove the local redefinitions entirely and import from the types file:
 
 ```ts
-type RuleExpression =
-  | { type: 'static'; value: string }
-  | { type: 'concatenate'; parts: Array<{ type: 'field' | 'literal'; value: string }> }
-  | { type: 'calculator'; field: string; operator: '+' | '-' | '*' | '/'; operand: number };
+import type { SyncRule, SyncFilter, RuleExpression } from '../../../../types/rules.types';
 ```
+
+No new types needed.
+
+---
+
+## New Shared Files
+
+| File | Purpose |
+|------|---------|
+| `src/lib/appFetch.ts` | Shared authenticated fetch helper (imported by settings.tsx, mapping.tsx) |
+| `src/lib/constants.ts` | `UPGRADE_URL`, `META_OAUTH_ENABLED` constants |
 
 ---
 
