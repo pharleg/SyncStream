@@ -83,7 +83,7 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
   return (
     <Box direction="vertical" gap="16px">
       {billingStatus && (
-        <SectionHelper appearance={billingStatus.plan === 'pro' ? 'success' : 'standard'}>
+        <SectionHelper skin={billingStatus.plan === 'pro' ? 'success' : 'standard'}>
           <Box verticalAlign="middle" gap="12px">
             <Text size="small" weight="bold">
               {billingStatus.plan === 'pro' ? 'Pro' : 'Free'}
@@ -103,16 +103,16 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
       {/* Stat cards */}
       <Box gap="12px">
         {[
-          { num: stats.total, label: 'Total Products', sub: 'in catalog', skin: undefined as 'standard' | 'error' | 'success' | 'premium' | 'disabled' | 'primary' | undefined, warningColor: false },
-          { num: stats.synced, label: 'Synced', sub: 'to GMC + Meta', skin: 'success' as const, warningColor: false },
-          { num: stats.failed, label: 'Failed', sub: 'need attention', skin: 'error' as const, warningColor: false },
-          { num: stats.warnings, label: 'Warnings', sub: 'missing SKUs etc.', skin: undefined as undefined, warningColor: true },
-        ].map(({ num, label, sub, skin, warningColor }) => (
+          { num: stats.total, label: 'Total Products', sub: 'in catalog', skin: undefined as 'standard' | 'error' | 'success' | 'premium' | 'disabled' | 'primary' | undefined },
+          { num: stats.synced, label: 'Synced', sub: 'to GMC + Meta', skin: 'success' as const },
+          { num: stats.failed, label: 'Failed', sub: 'need attention', skin: 'error' as const },
+          { num: stats.warnings, label: 'Warnings', sub: 'missing SKUs etc.', skin: undefined as undefined },
+        ].map(({ num, label, sub, skin }) => (
           <Box key={label} style={{ flex: 1 }}>
             <Card>
               <Card.Content>
                 <Box direction="vertical">
-                  <Text size="medium" weight="bold" skin={skin} style={{ fontSize: 24, ...(warningColor ? { color: '#f5a623' } : {}) }}>{num}</Text>
+                  <Text size="medium" weight="bold" skin={skin} style={{ fontSize: 24 }}>{num}</Text>
                   <Text size="small" weight="bold">{label}</Text>
                   <Text size="tiny" secondary>{sub}</Text>
                 </Box>
@@ -226,7 +226,7 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
           <Card.Content>
             {allTopIssues.length === 0 ? (
               <Box gap="6px" verticalAlign="middle">
-                <Text size="small" style={{ color: '#3db37a' }}>✓</Text>
+                <Text size="small" skin="success">✓</Text>
                 <Text size="small">All products healthy</Text>
               </Box>
             ) : (
