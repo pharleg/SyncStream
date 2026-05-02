@@ -13,6 +13,7 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
+import { appFetch } from '../../../../lib/appFetch';
 
 interface AppConfig {
   instanceId: string;
@@ -25,16 +26,16 @@ interface AppConfig {
 }
 
 async function fetchConfig(): Promise<AppConfig | null> {
-  const response = await fetch('/api/app-config?instanceId=default');
+  const response = await appFetch('/api/app-config');
   if (!response.ok) return null;
   return response.json();
 }
 
 async function updateConfig(updates: Partial<AppConfig>): Promise<void> {
-  const response = await fetch('/api/app-config', {
+  const response = await appFetch('/api/app-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instanceId: 'default', ...updates }),
+    body: JSON.stringify(updates),
   });
   if (!response.ok) {
     const data = await response.json();
@@ -43,10 +44,10 @@ async function updateConfig(updates: Partial<AppConfig>): Promise<void> {
 }
 
 async function triggerFullSync(): Promise<{ total: number; synced: number; failed: number }> {
-  const response = await fetch('/api/sync-trigger', {
+  const response = await appFetch('/api/sync-trigger', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instanceId: 'default', platforms: ['gmc'] }),
+    body: JSON.stringify({ platforms: ['gmc'] }),
   });
   if (!response.ok) throw new Error('Sync failed');
   return response.json();
@@ -61,13 +62,17 @@ const SettingsPage: FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [enhancing, setEnhancing] = useState(false);
   const [enhancedCount, setEnhancedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     Promise.all([
       fetchConfig().then(setConfig).catch(() => {}),
-      fetch('/api/enhance?instanceId=default')
-        .then((r) => (r.ok ? r.json() : { enhancedCount: 0 }))
-        .then((data: { enhancedCount: number }) => setEnhancedCount(data.enhancedCount))
+      appFetch('/api/enhance')
+        .then((r) => (r.ok ? r.json() : { enhancedCount: 0, totalCount: 0 }))
+        .then((data: { enhancedCount: number; totalCount: number }) => {
+          setEnhancedCount(data.enhancedCount);
+          setTotalCount(data.totalCount);
+        })
         .catch(() => {}),
     ]).finally(() => setLoading(false));
   }, []);
@@ -143,10 +148,10 @@ const SettingsPage: FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const response = await fetch('/api/enhance', {
+      const response = await appFetch('/api/enhance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default' }),
+        body: JSON.stringify({}),
       });
       if (!response.ok) throw new Error('Enhancement failed');
       const result = await response.json();
@@ -238,7 +243,7 @@ const SettingsPage: FC = () => {
                       {config?.aiEnhancementEnabled ? 'Enabled' : 'Disabled'}
                     </Text>
                   </Box>
-                  <FormField label="Style / Tone (optional)">
+                  <FormField label="Description Tone (optional)">
                     <Input
                       value={config?.aiEnhancementStyle ?? ''}
                       onChange={(e) => handleAiStyleChange(e.target.value)}
@@ -255,11 +260,18 @@ const SettingsPage: FC = () => {
                     >
                       {enhancing ? 'Enhancing...' : 'Enhance All Descriptions'}
                     </Button>
-                    <Text size="tiny" secondary>
-                      {enhancedCount > 0
-                        ? `${enhancedCount} product${enhancedCount === 1 ? '' : 's'} enhanced`
-                        : 'No products enhanced yet'}
-                    </Text>
+                    <Box direction="vertical" gap="2px">
+                      {totalCount > enhancedCount && (
+                        <Text size="tiny" secondary>
+                          {totalCount - enhancedCount} product{totalCount - enhancedCount !== 1 ? 's' : ''} pending · uses {totalCount - enhancedCount} AI credit{totalCount - enhancedCount !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                      <Text size="tiny" secondary>
+                        {enhancedCount > 0
+                          ? `${enhancedCount} already enhanced`
+                          : 'No products enhanced yet'}
+                      </Text>
+                    </Box>
                   </Box>
                 </Box>
               </Card.Content>
@@ -277,7 +289,7 @@ const SettingsPage: FC = () => {
               <Card.Divider />
               <Card.Content>
                 <Button onClick={handleFullSync} disabled={syncing || !config?.gmcConnected}>
-                  {syncing ? 'Syncing...' : 'Run Full Sync'}
+                  {syncing ? 'Syncing...' : 'Sync to Channels'}
                 </Button>
               </Card.Content>
             </Card>
