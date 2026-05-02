@@ -89,18 +89,25 @@ const TAB_ITEMS = [
   { id: 'filters', title: 'Filters' },
 ];
 
-const GMC_FIELDS = [
+const SHARED_FIELDS = [
   'title', 'description', 'price', 'salePrice', 'brand', 'condition',
-  'gtin', 'mpn', 'googleProductCategory', 'imageLink', 'availability',
+  'gtin', 'mpn', 'imageLink', 'availability',
 ].map((f) => ({ id: f, value: f }));
+
+const GMC_FIELDS = [
+  ...SHARED_FIELDS,
+  { id: 'googleProductCategory', value: 'googleProductCategory' },
+];
 
 const META_FIELDS = [
-  'title', 'description', 'price', 'salePrice', 'brand', 'condition',
-  'gtin', 'mpn', 'retailer_id', 'imageLink', 'availability',
-].map((f) => ({ id: f, value: f }));
+  ...SHARED_FIELDS,
+  { id: 'retailer_id', value: 'retailer_id' },
+];
 
 function getFieldOptions(platform: string) {
-  return platform === 'meta' ? META_FIELDS : GMC_FIELDS;
+  if (platform === 'meta') return META_FIELDS;
+  if (platform === 'gmc') return GMC_FIELDS;
+  return SHARED_FIELDS; // 'both' — only fields that work on both platforms
 }
 
 // ── API helpers ──
