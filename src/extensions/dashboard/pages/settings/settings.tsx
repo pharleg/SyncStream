@@ -155,14 +155,14 @@ const SettingsPage: FC = () => {
       });
       if (!response.ok) throw new Error('Enhancement failed');
       const result = await response.json();
-      setEnhancedCount(result.enhancedCount ?? enhancedCount);
+      setEnhancedCount((prev) => prev + (result.enhanced ?? 0));
       setSuccess(`AI enhancement complete: ${result.enhanced ?? 0} descriptions enhanced.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Enhancement failed');
     } finally {
       setEnhancing(false);
     }
-  }, [enhancedCount]);
+  }, []);
 
   if (loading) {
     return (
