@@ -19,31 +19,13 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
-import { httpClient } from '@wix/essentials';
 import { dashboard } from '@wix/dashboard';
 import { FixWizard } from './FixWizard';
 import { DashboardTabNormal, type DashboardStats, type PlatformHealth } from './DashboardTab';
 import { ProductsTab as ProductsTabComponent } from './ProductsTab';
 import type { ProductRowData, ApplyFixPayload } from './ProductRow';
 import type { SyncEvent, TopIssue } from '../../../../backend/dataService';
-
-async function appFetch(path: string, init?: RequestInit): Promise<Response> {
-  const baseUrl = new URL(import.meta.url).origin;
-  const fullUrl = `${baseUrl}${path}`;
-  console.log('[SyncStream] appFetch:', fullUrl);
-  try {
-    const res = await httpClient.fetchWithAuth(fullUrl, init);
-    console.log('[SyncStream] response status:', res.status);
-    if (!res.ok) {
-      const text = await res.clone().text();
-      console.error('[SyncStream] error body:', text);
-    }
-    return res;
-  } catch (err) {
-    console.error('[SyncStream] fetch error:', err);
-    throw err;
-  }
-}
+import { appFetch } from '../../../../lib/appFetch';
 
 const CHANGELOG_URL = 'https://syncstream.app/changelog';
 
@@ -112,7 +94,7 @@ interface SyncStatusData extends SyncSummary {
 }
 
 async function fetchAppConfig(): Promise<AppConfigData | null> {
-  const response = await appFetch('/api/app-config?instanceId=default');
+  const response = await appFetch('/api/app-config');
   if (!response.ok) return null;
   return response.json();
 }
@@ -121,7 +103,7 @@ async function saveAppConfig(updates: Record<string, unknown>): Promise<void> {
   const response = await appFetch('/api/app-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instanceId: 'default', ...updates }),
+    body: JSON.stringify({ ...updates }),
   });
   if (!response.ok) {
     const data = await response.json();
@@ -130,7 +112,7 @@ async function saveAppConfig(updates: Record<string, unknown>): Promise<void> {
 }
 
 async function fetchSyncStatus(): Promise<SyncSummary> {
-  const response = await appFetch('/api/sync-status?instanceId=default');
+  const response = await appFetch('/api/sync-status');
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error((data as any).error ?? 'Failed to fetch sync status');
@@ -139,7 +121,7 @@ async function fetchSyncStatus(): Promise<SyncSummary> {
 }
 
 async function fetchSyncEvents(): Promise<SyncEvent[]> {
-  const response = await appFetch('/api/sync-events?instanceId=default&limit=10');
+  const response = await appFetch('/api/sync-events?limit=10');
   if (!response.ok) return [];
   const data = await response.json();
   return (data as { events?: SyncEvent[] }).events ?? [];
@@ -149,7 +131,7 @@ async function triggerSync(): Promise<{ total: number; synced: number; failed: n
   const response = await appFetch('/api/sync-trigger', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instanceId: 'default', platforms: ['gmc'] }),
+    body: JSON.stringify({ platforms: ['gmc'] }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
@@ -159,7 +141,7 @@ async function triggerSync(): Promise<{ total: number; synced: number; failed: n
 }
 
 async function callInitiateGmcOAuth(): Promise<string> {
-  const response = await appFetch('/api/gmc-oauth-init?instanceId=default');
+  const response = await appFetch('/api/gmc-oauth-init');
   const data = await response.json();
   if (!response.ok) throw new Error(data.error);
   return data.authUrl;
@@ -169,7 +151,7 @@ async function exchangeGmcCode(code: string): Promise<void> {
   const response = await appFetch('/api/gmc-exchange-code', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ code, instanceId: 'default' }),
+    body: JSON.stringify({ code }),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({ error: 'Exchange failed' }));
@@ -354,7 +336,7 @@ const ConfirmSetupScreen: FC<{
     appFetch('/api/products-pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instanceId: 'default' }),
+      body: JSON.stringify({}),
     })
       .then((r) => r.json())
       .then((d: { count?: number }) => setProductCount(d.count ?? 0))
@@ -433,7 +415,7 @@ const ConfirmSetupScreen: FC<{
               label="Brand Name"
               infoContent="Used on all products sent to Google Merchant Center."
               statusMessage={brandSource ? `Pre-filled ${brandSource}` : undefined}
-              status={brandSource ? 'success' : brand ? undefined : 'warning'}
+              status={brand ? undefined : 'warning'}
             >
               <Input
                 value={brand}
@@ -446,7 +428,7 @@ const ConfirmSetupScreen: FC<{
               label="Store URL"
               infoContent="Used to build product links for Google."
               statusMessage={urlSource ? `Pre-filled ${urlSource}` : undefined}
-              status={urlSource ? 'success' : siteUrl ? undefined : 'warning'}
+              status={siteUrl ? undefined : 'warning'}
             >
               <Input
                 value={siteUrl}
@@ -642,17 +624,17 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
   const [newFilter, setNewFilter] = useState({ name: '', platform: 'both', field: '', operator: 'equals', value: '', conditionGroup: 'AND' });
 
   useEffect(() => {
-    appFetch('/api/rules?instanceId=default').then((r) => r.json()).then(setRules).catch(() => {});
-    appFetch('/api/filters?instanceId=default').then((r) => r.json()).then(setFilters).catch(() => {});
+    appFetch('/api/rules').then((r) => r.json()).then(setRules).catch(() => {});
+    appFetch('/api/filters').then((r) => r.json()).then(setFilters).catch(() => {});
   }, []);
 
   const reloadRules = useCallback(async () => {
-    const r = await appFetch('/api/rules?instanceId=default');
+    const r = await appFetch('/api/rules');
     setRules(await r.json());
   }, []);
 
   const reloadFilters = useCallback(async () => {
-    const r = await appFetch('/api/filters?instanceId=default');
+    const r = await appFetch('/api/filters');
     setFilters(await r.json());
   }, []);
 
@@ -660,7 +642,7 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
     (key: string, update: Partial<FieldMapping>) => {
       setMappings((prev) => ({
         ...prev,
-        [key]: { type: 'default', ...prev[key], ...update } as FieldMapping,
+        [key]: Object.assign({ type: 'default' }, prev[key], update) as FieldMapping,
       }));
       setSuccess(null);
     },
@@ -688,7 +670,7 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceId: 'default', name: newRule.name, platform: newRule.platform,
+          name: newRule.name, platform: newRule.platform,
           field: newRule.field, type: newRule.type,
           expression: buildExpression(newRule.type, exprState),
           order: rules.length, enabled: true,
@@ -720,7 +702,7 @@ const MappingTab: FC<{ config: AppConfigData | null }> = ({ config }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          instanceId: 'default', name: newFilter.name, platform: newFilter.platform,
+          name: newFilter.name, platform: newFilter.platform,
           field: newFilter.field, operator: newFilter.operator, value: newFilter.value,
           conditionGroup: newFilter.conditionGroup, order: filters.length, enabled: true,
         }),
@@ -997,7 +979,7 @@ const ProductsTab: FC<{
   const loadProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await appFetch('/api/products?instanceId=default');
+      const response = await appFetch('/api/products');
       const data = await response.json();
       const rows: ProductRowData[] = ((data as { products?: any[] }).products ?? []).map((p: any) => {
         const syncStatus = p.syncStatus as { status?: string; errorLog?: Array<{ field: string; message: string; severity: string }> } | undefined;
@@ -1054,7 +1036,7 @@ const ProductsTab: FC<{
   }, [loadProducts]);
 
   const handleCheckCompliance = useCallback(async () => {
-    await appFetch('/api/compliance-check?instanceId=default');
+    await appFetch('/api/compliance-check');
     await loadProducts();
   }, [loadProducts]);
 
@@ -1062,7 +1044,7 @@ const ProductsTab: FC<{
     await appFetch('/api/products-pull', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instanceId: 'default' }),
+      body: JSON.stringify({}),
     });
     await loadProducts();
   }, [loadProducts]);
@@ -1082,7 +1064,7 @@ const ProductsTab: FC<{
       const res = await appFetch('/api/compliance-apply-wix', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productId, fixes }),
+        body: JSON.stringify({ productId, fixes }),
       });
       await checkResponse(res, 'Apply to Wix');
     }
@@ -1091,7 +1073,7 @@ const ProductsTab: FC<{
       const res = await appFetch('/api/compliance-apply-gmc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default', productId, fixes: entries }),
+        body: JSON.stringify({ productId, fixes: entries }),
       });
       await checkResponse(res, 'Apply to GMC');
     }
@@ -1107,7 +1089,7 @@ const ProductsTab: FC<{
     await appFetch('/api/products-enhance', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ instanceId: 'default', productIds: [productId] }),
+      body: JSON.stringify({ productIds: [productId] }),
     });
     await loadProducts();
   }, [loadProducts]);
@@ -1307,7 +1289,7 @@ const DashboardTab: FC<{
 
   const pollProgress = useCallback(async () => {
     try {
-      const response = await appFetch('/api/sync-progress?instanceId=default');
+      const response = await appFetch('/api/sync-progress');
       const data = await response.json();
       if (data.progress) {
         setSyncProgress(data.progress);
@@ -1348,7 +1330,7 @@ const DashboardTab: FC<{
 
   const handleCheckCompliance = useCallback(async () => {
     try {
-      await appFetch('/api/compliance-check?instanceId=default');
+      await appFetch('/api/compliance-check');
       await loadData();
     } catch { /* silent */ }
   }, [loadData]);
@@ -1488,7 +1470,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
   }, []);
 
   useEffect(() => {
-    appFetch('/api/enhance?instanceId=default')
+    appFetch('/api/enhance')
       .then((r) => r.json())
       .then((data) => setEnhancedCount(data.enhancedCount ?? 0))
       .catch(() => {});
@@ -1549,7 +1531,7 @@ const SettingsTab: FC<{ config: AppConfigData | null; onRefresh: () => void }> =
       const response = await appFetch('/api/enhance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ instanceId: 'default' }),
+        body: JSON.stringify({}),
       });
       const data = await response.json();
       setEnhancedCount(data.enhanced ?? 0);
@@ -1715,15 +1697,14 @@ const SyncStreamPage: FC = () => {
       const oauthRes = await appFetch('/api/gmc-complete-oauth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-      }).catch((e: unknown) => { console.error('[SyncStream] gmc-complete-oauth fetch error:', e); return null; });
+      }).catch(() => null);
       if (oauthRes && !oauthRes.ok) {
-        const oauthBody = await oauthRes.json().catch(() => ({})) as Record<string, unknown>;
-        console.error('[SyncStream] gmc-complete-oauth failed:', oauthRes.status, oauthBody);
+        await oauthRes.json().catch(() => ({}));
       }
 
       const [configRes, billingRes] = await Promise.all([
-        appFetch('/api/app-config?instanceId=default'),
-        appFetch('/api/billing-status?instanceId=default'),
+        appFetch('/api/app-config'),
+        appFetch('/api/billing-status'),
       ]);
 
       const data: AppConfigData | null = configRes.ok ? await configRes.json() : null;
