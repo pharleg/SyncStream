@@ -1,6 +1,7 @@
 // src/extensions/dashboard/pages/sync-stream/ProductsTab.tsx
-import { type FC, type CSSProperties, useState, useMemo, useEffect } from 'react';
-import { Box, Text, Input, Button, Loader } from '@wix/design-system';
+import { type FC, type SyntheticEvent, useState, useMemo, useEffect } from 'react';
+import { Box, Text, Input, Button, Loader, SegmentedToggle, SectionHelper } from '@wix/design-system';
+import { UPGRADE_URL } from '../../../../lib/constants';
 import { ProductRow, type ProductRowData, type ApplyFixPayload } from './ProductRow';
 
 interface BillingStatus {
@@ -96,25 +97,6 @@ export const ProductsTab: FC<ProductsTabProps> = ({
     try { await onRefreshFromWix(); } finally { setRefreshing(false); }
   };
 
-  const filterTabStyle = (tab: FilterTab): CSSProperties => ({
-    padding: '6px 14px',
-    borderRadius: 100,
-    fontSize: 12,
-    fontWeight: 600,
-    cursor: 'pointer',
-    border: `1px solid ${
-      activeFilter === tab
-        ? (tab === 'failed' ? '#f5c6c6' : tab === 'warnings' ? '#f5d67a' : tab === 'synced' ? '#a5d6b0' : '#32536a')
-        : '#dfe5eb'
-    }`,
-    background: activeFilter === tab
-      ? (tab === 'failed' ? '#fce8e8' : tab === 'warnings' ? '#fff8e1' : tab === 'synced' ? '#e8f5ee' : '#32536a')
-      : 'white',
-    color: activeFilter === tab
-      ? (tab === 'failed' ? '#c62828' : tab === 'warnings' ? '#c17d00' : tab === 'synced' ? '#2e7d32' : 'white')
-      : '#7a92a5',
-  });
-
   if (loading) {
     return (
       <Box align="center" padding="60px">
@@ -126,46 +108,26 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   return (
     <Box direction="vertical" gap="12px">
       {syncBlocked && (
-        <Box
-          verticalAlign="middle"
-          gap="12px"
-          style={{
-            padding: '10px 14px',
-            background: '#fff8e1',
-            border: '1px solid #f5d67a',
-            borderRadius: 8,
-          }}
+        <SectionHelper
+          skin="warning"
+          title="Catalog limit reached"
+          actionText="Upgrade to Pro"
+          onAction={() => window.open(UPGRADE_URL, '_blank')}
         >
-          <Text size="small" style={{ flex: 1 }}>
-            Free plan is limited to 50 products. You have {products.length} products — sync is paused.
-          </Text>
-          <Button
-            size="small"
-            style={{ background: '#f5a623', color: 'white', border: 'none' }}
-            onClick={() => window.open('https://manage.wix.com/app-market', '_blank')}
-          >
-            Upgrade to Pro
-          </Button>
-        </Box>
+          Free plan supports up to 50 products. You have {products.length} — upgrade to resume sync.
+        </SectionHelper>
       )}
       {/* Toolbar */}
       <Box gap="8px" verticalAlign="middle" style={{ flexWrap: 'wrap' }}>
-        <Box gap="6px">
-          {(['all', 'failed', 'warnings', 'synced'] as FilterTab[]).map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              style={{
-                ...filterTabStyle(tab),
-                fontFamily: 'inherit',
-                outline: 'none',
-              }}
-              onClick={() => setActiveFilter(tab)}
-            >
-              {tab.charAt(0).toUpperCase() + tab.slice(1)} ({counts[tab]})
-            </button>
-          ))}
-        </Box>
+        <SegmentedToggle
+          selected={activeFilter}
+          onClick={(_e: SyntheticEvent, value: string) => setActiveFilter(value as FilterTab)}
+        >
+          <SegmentedToggle.Button value="all">All ({counts.all})</SegmentedToggle.Button>
+          <SegmentedToggle.Button value="failed">Failed ({counts.failed})</SegmentedToggle.Button>
+          <SegmentedToggle.Button value="warnings">Warnings ({counts.warnings})</SegmentedToggle.Button>
+          <SegmentedToggle.Button value="synced">Synced ({counts.synced})</SegmentedToggle.Button>
+        </SegmentedToggle>
         <Box style={{ flex: 1, minWidth: 160 }}>
           <Input
             size="small"
