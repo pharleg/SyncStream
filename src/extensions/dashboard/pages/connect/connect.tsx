@@ -1,5 +1,6 @@
 import { type FC, useState, useEffect, useCallback } from 'react';
 import {
+  Badge,
   Box,
   Button,
   Card,
@@ -46,7 +47,6 @@ async function callCompleteGmcOAuth(): Promise<{ connected: boolean; error?: str
     });
     const data = await response.json();
     if (!response.ok) return { connected: false, error: data.error ?? `HTTP ${response.status}` };
-    if (!data.connected && data.debug_instanceId) return { connected: false };
     return { connected: data.connected === true };
   } catch (e) {
     return { connected: false, error: e instanceof Error ? e.message : String(e) };
@@ -164,20 +164,7 @@ const ConnectPage: FC = () => {
                   ) : META_OAUTH_ENABLED ? (
                     <Button size="small" disabled>Connect</Button>
                   ) : (
-                    <Text
-                      size="tiny"
-                      weight="bold"
-                      style={{
-                        background: '#eaf4ff',
-                        color: '#116dff',
-                        border: '1px solid #c5deff',
-                        borderRadius: 100,
-                        padding: '3px 10px',
-                        letterSpacing: 0.3,
-                      }}
-                    >
-                      COMING SOON
-                    </Text>
+                    <Badge size="tiny" skin="standard">COMING SOON</Badge>
                   )
                 }
               />

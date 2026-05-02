@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
       .single();
 
     if (error || !data) {
-      return new Response(JSON.stringify({ connected: false, debug_instanceId: instanceId, debug_error: error?.message }), {
+      return new Response(JSON.stringify({ connected: false }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
