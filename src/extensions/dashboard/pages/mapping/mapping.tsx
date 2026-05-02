@@ -15,6 +15,8 @@ import {
   WixDesignSystemProvider,
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
+import { appFetch } from '../../../../lib/appFetch';
+import type { SyncRule, SyncFilter } from '../../../../types/rules.types';
 
 // ── Types ──
 
@@ -31,31 +33,6 @@ interface MappingField {
   label: string;
   description: string;
   placeholder: string;
-}
-
-interface SyncRule {
-  id?: string;
-  instanceId: string;
-  name: string;
-  platform: string;
-  field: string;
-  type: string;
-  expression: any;
-  order: number;
-  enabled: boolean;
-}
-
-interface SyncFilter {
-  id?: string;
-  instanceId: string;
-  name: string;
-  platform: string;
-  field: string;
-  operator: string;
-  value: string;
-  conditionGroup: string;
-  order: number;
-  enabled: boolean;
 }
 
 // ── Constants ──
@@ -112,20 +89,34 @@ const TAB_ITEMS = [
   { id: 'filters', title: 'Filters' },
 ];
 
+const GMC_FIELDS = [
+  'title', 'description', 'price', 'salePrice', 'brand', 'condition',
+  'gtin', 'mpn', 'googleProductCategory', 'imageLink', 'availability',
+].map((f) => ({ id: f, value: f }));
+
+const META_FIELDS = [
+  'title', 'description', 'price', 'salePrice', 'brand', 'condition',
+  'gtin', 'mpn', 'retailer_id', 'imageLink', 'availability',
+].map((f) => ({ id: f, value: f }));
+
+function getFieldOptions(platform: string) {
+  return platform === 'meta' ? META_FIELDS : GMC_FIELDS;
+}
+
 // ── API helpers ──
 
 async function fetchMappings(): Promise<FieldMappings> {
-  const response = await fetch('/api/app-config?instanceId=default');
+  const response = await appFetch('/api/app-config');
   if (!response.ok) return {};
   const config = await response.json();
   return config?.fieldMappings ?? {};
 }
 
 async function saveMappings(mappings: FieldMappings): Promise<void> {
-  const response = await fetch('/api/app-config', {
+  const response = await appFetch('/api/app-config', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ instanceId: 'default', fieldMappings: mappings }),
+    body: JSON.stringify({ fieldMappings: mappings }),
   });
   if (!response.ok) {
     const data = await response.json();
@@ -134,13 +125,13 @@ async function saveMappings(mappings: FieldMappings): Promise<void> {
 }
 
 async function fetchRules(): Promise<SyncRule[]> {
-  const response = await fetch('/api/rules?instanceId=default');
+  const response = await appFetch('/api/rules');
   if (!response.ok) return [];
   return response.json();
 }
 
-async function apiSaveRule(rule: SyncRule): Promise<void> {
-  const response = await fetch('/api/rules', {
+async function apiSaveRule(rule: Omit<SyncRule, 'id' | 'instanceId'> & { id?: string; instanceId?: string }): Promise<void> {
+  const response = await appFetch('/api/rules', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(rule),
@@ -149,18 +140,18 @@ async function apiSaveRule(rule: SyncRule): Promise<void> {
 }
 
 async function apiDeleteRule(id: string): Promise<void> {
-  const response = await fetch(`/api/rules?id=${id}`, { method: 'DELETE' });
+  const response = await appFetch(`/api/rules?id=${id}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Failed to delete rule');
 }
 
 async function fetchFilters(): Promise<SyncFilter[]> {
-  const response = await fetch('/api/filters?instanceId=default');
+  const response = await appFetch('/api/filters');
   if (!response.ok) return [];
   return response.json();
 }
 
-async function apiSaveFilter(filter: SyncFilter): Promise<void> {
-  const response = await fetch('/api/filters', {
+async function apiSaveFilter(filter: Omit<SyncFilter, 'id' | 'instanceId'> & { id?: string; instanceId?: string }): Promise<void> {
+  const response = await appFetch('/api/filters', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(filter),
@@ -169,13 +160,13 @@ async function apiSaveFilter(filter: SyncFilter): Promise<void> {
 }
 
 async function apiDeleteFilter(id: string): Promise<void> {
-  const response = await fetch(`/api/filters?id=${id}`, { method: 'DELETE' });
+  const response = await appFetch(`/api/filters?id=${id}`, { method: 'DELETE' });
   if (!response.ok) throw new Error('Failed to delete filter');
 }
 
 // ── Rule expression builder helper ──
 
-function buildExpression(type: string, exprState: any): any {
+function buildExpression(type: string, exprState: { staticValue: string; concatValue: string; calcField: string; calcOperator: string; calcOperand: string }): object {
   switch (type) {
     case 'static':
       return { value: exprState.staticValue ?? '' };
@@ -248,13 +239,12 @@ const MappingPage: FC = () => {
   const handleSaveRule = useCallback(async () => {
     setSaving(true); setError(null);
     try {
-      const rule: SyncRule = {
-        instanceId: 'default',
+      const rule = {
         name: newRule.name,
-        platform: newRule.platform,
+        platform: newRule.platform as SyncRule['platform'],
         field: newRule.field,
-        type: newRule.type,
-        expression: buildExpression(newRule.type, exprState),
+        type: newRule.type as SyncRule['type'],
+        expression: buildExpression(newRule.type, exprState) as SyncRule['expression'],
         order: rules.length,
         enabled: true,
       };
@@ -281,14 +271,13 @@ const MappingPage: FC = () => {
   const handleSaveFilter = useCallback(async () => {
     setSaving(true); setError(null);
     try {
-      const filter: SyncFilter = {
-        instanceId: 'default',
+      const filter = {
         name: newFilter.name,
-        platform: newFilter.platform,
+        platform: newFilter.platform as SyncFilter['platform'],
         field: newFilter.field,
-        operator: newFilter.operator,
+        operator: newFilter.operator as SyncFilter['operator'],
         value: newFilter.value,
-        conditionGroup: newFilter.conditionGroup,
+        conditionGroup: newFilter.conditionGroup as SyncFilter['conditionGroup'],
         order: filters.length,
         enabled: true,
       };
@@ -391,8 +380,8 @@ const MappingPage: FC = () => {
             {activeTab === 'rules' && (
               <Box direction="vertical" gap="18px">
                 <Box>
-                  <Button size="small" onClick={() => setShowRuleForm(!showRuleForm)}>
-                    {showRuleForm ? 'Cancel' : 'Add Rule'}
+                  <Button size="small" onClick={() => setShowRuleForm(true)} disabled={showRuleForm}>
+                    Add Rule
                   </Button>
                 </Box>
 
@@ -412,7 +401,13 @@ const MappingPage: FC = () => {
                         </Box>
                         <Box gap="12px">
                           <FormField label="Target Field">
-                            <Input size="small" value={newRule.field} onChange={(e) => setNewRule({ ...newRule, field: e.target.value })} placeholder="e.g., title, description, price" />
+                            <Dropdown
+                              size="small"
+                              options={getFieldOptions(newRule.platform)}
+                              selectedId={newRule.field || undefined}
+                              placeholder="Select a field"
+                              onSelect={(option) => setNewRule({ ...newRule, field: option.id as string })}
+                            />
                           </FormField>
                           <FormField label="Rule Type">
                             <Dropdown size="small" options={RULE_TYPE_OPTIONS} selectedId={newRule.type} onSelect={(o) => setNewRule({ ...newRule, type: o.id as string })} />
@@ -443,9 +438,18 @@ const MappingPage: FC = () => {
                           </Box>
                         )}
 
-                        <Button size="small" onClick={handleSaveRule} disabled={saving || !newRule.name || !newRule.field}>
-                          {saving ? 'Saving...' : 'Save Rule'}
-                        </Button>
+                        <Box gap="8px" verticalAlign="middle">
+                          <Button size="small" onClick={handleSaveRule} disabled={saving || !newRule.name || !newRule.field}>
+                            {saving ? 'Saving...' : 'Save Rule'}
+                          </Button>
+                          <Button size="small" skin="light" onClick={() => {
+                            setShowRuleForm(false);
+                            setNewRule({ name: '', platform: 'both', field: '', type: 'static' });
+                            setExprState({ staticValue: '', concatValue: '', calcField: '', calcOperator: '+', calcOperand: '' });
+                          }}>
+                            Cancel
+                          </Button>
+                        </Box>
                       </Box>
                     </Card.Content>
                   </Card>
@@ -485,8 +489,8 @@ const MappingPage: FC = () => {
             {activeTab === 'filters' && (
               <Box direction="vertical" gap="18px">
                 <Box>
-                  <Button size="small" onClick={() => setShowFilterForm(!showFilterForm)}>
-                    {showFilterForm ? 'Cancel' : 'Add Filter'}
+                  <Button size="small" onClick={() => setShowFilterForm(true)} disabled={showFilterForm}>
+                    Add Filter
                   </Button>
                 </Box>
 
@@ -521,9 +525,17 @@ const MappingPage: FC = () => {
                           </FormField>
                         </Box>
 
-                        <Button size="small" onClick={handleSaveFilter} disabled={saving || !newFilter.name || !newFilter.field}>
-                          {saving ? 'Saving...' : 'Save Filter'}
-                        </Button>
+                        <Box gap="8px" verticalAlign="middle">
+                          <Button size="small" onClick={handleSaveFilter} disabled={saving || !newFilter.name || !newFilter.field}>
+                            {saving ? 'Saving...' : 'Save Filter'}
+                          </Button>
+                          <Button size="small" skin="light" onClick={() => {
+                            setShowFilterForm(false);
+                            setNewFilter({ name: '', platform: 'both', field: '', operator: 'equals', value: '', conditionGroup: 'AND' });
+                          }}>
+                            Cancel
+                          </Button>
+                        </Box>
                       </Box>
                     </Card.Content>
                   </Card>
