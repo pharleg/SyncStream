@@ -1,7 +1,8 @@
 // src/extensions/dashboard/pages/sync-stream/DashboardTab.tsx
 import { type FC } from 'react';
-import { Box, Text, Button, Card, Loader } from '@wix/design-system';
+import { Box, Text, Button, Card, Loader, LinearProgressBar, Badge, SectionHelper } from '@wix/design-system';
 import type { SyncEvent, TopIssue } from '../../../../backend/dataService';
+import { UPGRADE_URL } from '../../../../lib/constants';
 
 export interface DashboardStats {
   total: number;
@@ -47,14 +48,6 @@ function relativeTime(iso: string): string {
   return `${Math.floor(hrs / 24)} days ago`;
 }
 
-function severityDotColor(severity: SyncEvent['severity']): string {
-  switch (severity) {
-    case 'success': return '#3db37a';
-    case 'error': return '#e53935';
-    case 'warning': return '#f5a623';
-    case 'info': return '#116dff';
-  }
-}
 
 export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
   stats,
@@ -90,63 +83,42 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
   return (
     <Box direction="vertical" gap="16px">
       {billingStatus && (
-        <Box
-          verticalAlign="middle"
-          gap="12px"
-          style={{
-            padding: '8px 14px',
-            background: billingStatus.plan === 'pro' ? '#eaf4ff' : '#f7f9fb',
-            border: '1px solid #e8edf0',
-            borderRadius: 8,
-          }}
-        >
-          <span
-            style={{
-              fontSize: 11,
-              fontWeight: 700,
-              padding: '2px 8px',
-              borderRadius: 100,
-              background: billingStatus.plan === 'pro' ? '#116dff' : '#32536a',
-              color: 'white',
-              textTransform: 'uppercase' as const,
-              letterSpacing: 0.5,
-            }}
-          >
-            {billingStatus.plan === 'pro' ? 'Pro' : 'Free'}
-          </span>
-          <Text size="small" secondary style={{ flex: 1 }}>
-            AI credits: {billingStatus.creditsRemaining} remaining · resets{' '}
-            {new Date(billingStatus.resetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          </Text>
-          {billingStatus.plan === 'free' && (
-            <Button
-              size="tiny"
-              skin="light"
-              style={{ fontSize: 11 }}
-              onClick={() => window.open('https://manage.wix.com/app-market', '_blank')}
-            >
-              Upgrade to Pro
-            </Button>
-          )}
-        </Box>
+        <SectionHelper appearance={billingStatus.plan === 'pro' ? 'success' : 'standard'}>
+          <Box verticalAlign="middle" gap="12px">
+            <Text size="small" weight="bold">
+              {billingStatus.plan === 'pro' ? 'Pro' : 'Free'}
+            </Text>
+            <Text size="small" style={{ flex: 1 }}>
+              AI credits: {billingStatus.creditsRemaining} remaining · resets{' '}
+              {new Date(billingStatus.resetDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+            </Text>
+            {billingStatus.plan === 'free' && (
+              <Button size="tiny" skin="light" onClick={() => window.open(UPGRADE_URL, '_blank')}>
+                Upgrade to Pro
+              </Button>
+            )}
+          </Box>
+        </SectionHelper>
       )}
       {/* Stat cards */}
       <Box gap="12px">
         {[
-          { num: stats.total, label: 'Total Products', sub: 'in catalog', color: '#32536a' },
-          { num: stats.synced, label: 'Synced', sub: 'to GMC + Meta', color: '#3db37a' },
-          { num: stats.failed, label: 'Failed', sub: 'need attention', color: '#e53935' },
-          { num: stats.warnings, label: 'Warnings', sub: 'missing SKUs etc.', color: '#f5a623' },
-        ].map(({ num, label, sub, color }) => (
-          <Box key={label} style={{ flex: 1 }}><Card>
-            <Card.Content>
-              <Box direction="vertical">
-                <Text size="medium" weight="bold" style={{ color, fontSize: 24 }}>{num}</Text>
-                <Text size="small" weight="bold">{label}</Text>
-                <Text size="tiny" secondary>{sub}</Text>
-              </Box>
-            </Card.Content>
-          </Card></Box>
+          { num: stats.total, label: 'Total Products', sub: 'in catalog', skin: undefined as 'standard' | 'error' | 'success' | 'premium' | 'disabled' | 'primary' | undefined, warningColor: false },
+          { num: stats.synced, label: 'Synced', sub: 'to GMC + Meta', skin: 'success' as const, warningColor: false },
+          { num: stats.failed, label: 'Failed', sub: 'need attention', skin: 'error' as const, warningColor: false },
+          { num: stats.warnings, label: 'Warnings', sub: 'missing SKUs etc.', skin: undefined as undefined, warningColor: true },
+        ].map(({ num, label, sub, skin, warningColor }) => (
+          <Box key={label} style={{ flex: 1 }}>
+            <Card>
+              <Card.Content>
+                <Box direction="vertical">
+                  <Text size="medium" weight="bold" skin={skin} style={{ fontSize: 24, ...(warningColor ? { color: '#f5a623' } : {}) }}>{num}</Text>
+                  <Text size="small" weight="bold">{label}</Text>
+                  <Text size="tiny" secondary>{sub}</Text>
+                </Box>
+              </Card.Content>
+            </Card>
+          </Box>
         ))}
       </Box>
 
@@ -164,30 +136,24 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
         <Card.Content>
           <Box direction="vertical" gap="10px">
             {[
-              { label: 'Google Merchant Center', health: platformHealth.gmc, color: '#3db37a' },
-              { label: 'Meta Catalog', health: platformHealth.meta, color: '#116dff' },
-            ].map(({ label, health, color }) => (
+              { label: 'Google Merchant Center', health: platformHealth.gmc },
+              { label: 'Meta Catalog', health: platformHealth.meta },
+            ].map(({ label, health }) => (
               <Box key={label} direction="vertical" gap="4px">
                 <Box gap="8px" verticalAlign="middle">
                   <Text size="small" weight="bold" style={{ flex: 1 }}>{label}</Text>
                   {health.connected ? (
-                    <Text size="small" weight="bold" style={{ color }}>{health.pct}%</Text>
+                    <Text size="small" weight="bold">{health.pct}%</Text>
                   ) : (
                     <Text size="tiny" secondary>Not connected</Text>
                   )}
                 </Box>
                 {health.connected && (
                   <>
-                    <Box style={{ height: 8, background: '#e8edf0', borderRadius: 4, overflow: 'hidden' }}>
-                      <Box
-                        style={{
-                          height: '100%',
-                          width: `${health.pct}%`,
-                          background: color,
-                          borderRadius: 4,
-                        }}
-                      />
-                    </Box>
+                    <LinearProgressBar
+                      value={health.pct}
+                      skin={health.errors === 0 ? 'success' : 'warning'}
+                    />
                     <Text size="tiny" secondary>
                       {health.synced} of {health.total} products passing · {health.errors} errors
                     </Text>
@@ -205,11 +171,7 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
           {syncing ? <Loader size="tiny" /> : 'Sync to Channels'}
         </Button>
         {stats.failed > 0 && (
-          <Button
-            skin="light"
-            onClick={onNavigateToFailed}
-            style={{ color: '#c17d00', borderColor: '#f5d67a', background: '#fff8e1' }}
-          >
+          <Button skin="light" onClick={onNavigateToFailed}>
             Fix Issues ({stats.failed})
           </Button>
         )}
@@ -236,16 +198,16 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
                     verticalAlign="middle"
                     style={{ padding: '7px 0', borderBottom: '1px solid #f7f9fb' }}
                   >
-                    <span
-                      style={{
-                        width: 7,
-                        height: 7,
-                        borderRadius: '50%',
-                        background: severityDotColor(event.severity),
-                        flexShrink: 0,
-                        display: 'inline-block',
-                      }}
-                    />
+                    <Badge
+                      size="tiny"
+                      skin={
+                        event.severity === 'success' ? 'success' :
+                        event.severity === 'error' ? 'danger' :
+                        event.severity === 'warning' ? 'warning' : 'standard'
+                      }
+                    >
+                      {event.severity}
+                    </Badge>
                     <Text size="small" style={{ flex: 1 }}>{event.message}</Text>
                     <Text size="tiny" secondary>
                       {event.createdAt ? relativeTime(event.createdAt) : ''}
@@ -279,19 +241,9 @@ export const DashboardTabNormal: FC<DashboardTabNormalProps> = ({
                     <Text size="small">
                       {issue.message} ({issue.count} product{issue.count !== 1 ? 's' : ''})
                     </Text>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        fontWeight: 700,
-                        padding: '2px 6px',
-                        borderRadius: 4,
-                        background: issue.severity === 'error' ? '#fce8e8' : '#fff8e1',
-                        color: issue.severity === 'error' ? '#c62828' : '#c17d00',
-                        flexShrink: 0,
-                      }}
-                    >
+                    <Badge size="tiny" skin={issue.severity === 'error' ? 'danger' : 'warning'}>
                       {issue.severity === 'error' ? 'Error' : 'Warning'}
-                    </span>
+                    </Badge>
                   </Box>
                 ))}
               </Box>
