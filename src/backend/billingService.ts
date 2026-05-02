@@ -105,18 +105,11 @@ export async function checkSyncLimit(
 }
 
 export async function checkPlatformAccess(
-  instanceId: string,
-  platform: 'gmc' | 'meta',
+  _instanceId: string,
+  _platform: 'gmc' | 'meta',
 ): Promise<void> {
-  if (platform !== 'meta') return;
-  const db = await getClient();
-  const row = await getRow(instanceId, db);
-  if (row.plan_tier === 'free') {
-    throw new BillingError(
-      'PLATFORM_NOT_AVAILABLE',
-      'Meta sync requires a Pro plan.',
-    );
-  }
+  // Both platforms available on Free and Pro.
+  // Product count is gated by checkSyncLimit (50 products on Free).
 }
 
 // Note: read-modify-write is not atomic. Concurrent calls from the same

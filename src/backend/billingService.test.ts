@@ -102,9 +102,8 @@ describe('checkSyncLimit', () => {
 });
 
 describe('checkPlatformAccess', () => {
-  it('throws PLATFORM_NOT_AVAILABLE for free plan trying meta', async () => {
-    await expect(checkPlatformAccess('test-instance', 'meta'))
-      .rejects.toMatchObject({ code: 'PLATFORM_NOT_AVAILABLE' });
+  it('passes for free plan accessing meta', async () => {
+    await expect(checkPlatformAccess('test-instance', 'meta')).resolves.toBeUndefined();
   });
 
   it('passes for free plan accessing gmc', async () => {
