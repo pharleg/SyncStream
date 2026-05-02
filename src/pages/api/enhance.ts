@@ -55,7 +55,6 @@ export const GET: APIRoute = async ({ request }) => {
     if (session instanceof Response) return session;
     const { instanceId } = session;
 
-    // Import supabase client to count enhanced content
     const { createClient } = await import('@supabase/supabase-js');
     const { secrets } = await import('@wix/secrets');
     const supabaseUrl = (await secrets.getSecretValue('supabase_project_url')).value!;
@@ -69,7 +68,14 @@ export const GET: APIRoute = async ({ request }) => {
 
     if (error) throw new Error(error.message);
 
-    return new Response(JSON.stringify({ enhancedCount: count ?? 0 }), {
+    const { productsV3 } = await import('@wix/stores');
+    const productsResponse = await productsV3.queryProducts(
+      { cursorPaging: { limit: 100 } },
+      { fields: [] },
+    );
+    const totalCount = (productsResponse.products ?? []).length;
+
+    return new Response(JSON.stringify({ enhancedCount: count ?? 0, totalCount }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (error) {
