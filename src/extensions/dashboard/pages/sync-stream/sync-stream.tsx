@@ -1018,6 +1018,7 @@ const ProductsTab: FC<{
           enhancedTitle: (p.enhancedTitle ?? null) as string | null,
           enhancedDescription: (p.enhancedDescription ?? null) as string | null,
           lastEnhancedAt: null,
+          platforms: (p.platforms ?? null) as ('gmc' | 'meta')[] | null,
         } satisfies ProductRowData;
       });
       setProducts(rows);
@@ -1045,6 +1046,23 @@ const ProductsTab: FC<{
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
+    });
+    await loadProducts();
+  }, [loadProducts]);
+
+  const handlePlatformChange = useCallback(async (productId: string, platforms: ('gmc' | 'meta')[] | null) => {
+    await appFetch('/api/product-platforms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds: [productId], platforms }),
+    });
+  }, []);
+
+  const handleBulkPlatformChange = useCallback(async (productIds: string[], platforms: ('gmc' | 'meta')[] | null) => {
+    await appFetch('/api/product-platforms', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productIds, platforms }),
     });
     await loadProducts();
   }, [loadProducts]);
@@ -1109,6 +1127,8 @@ const ProductsTab: FC<{
       onApplyFix={handleApplyFix}
       onToggleAI={handleToggleAI}
       onEnhanceNow={handleEnhanceNow}
+      onPlatformChange={handlePlatformChange}
+      onBulkPlatformChange={handleBulkPlatformChange}
       initialFilter={initialFilter}
       billingStatus={billingStatus}
     />

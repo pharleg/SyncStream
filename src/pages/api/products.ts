@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { getCachedProducts, getProductsCacheTimestamp, querySyncStates, getBulkEnhancedContent } from '../../backend/dataService';
+import { getCachedProducts, getProductsCacheTimestamp, querySyncStates, getBulkEnhancedContent, getBatchProductPlatforms } from '../../backend/dataService';
 import { requireAuth } from '../../lib/requireAuth';
 
 export const GET: APIRoute = async ({ request }) => {
@@ -26,15 +26,17 @@ export const GET: APIRoute = async ({ request }) => {
     }
 
     const productIds = products.map((p) => p.productId);
-    const enhancedMap = productIds.length > 0
-      ? await getBulkEnhancedContent(instanceId, productIds)
-      : new Map();
+    const [enhancedMap, platformsMap] = await Promise.all([
+      productIds.length > 0 ? getBulkEnhancedContent(instanceId, productIds) : Promise.resolve(new Map()),
+      productIds.length > 0 ? getBatchProductPlatforms(productIds) : Promise.resolve(new Map()),
+    ]);
 
     const enriched = products.map((p) => ({
       ...p,
       syncStatus: syncMap.get(p.productId) ?? null,
       enhancedDescription: enhancedMap.get(p.productId)?.enhancedDescription ?? null,
       enhancedTitle: enhancedMap.get(p.productId)?.enhancedTitle ?? null,
+      platforms: platformsMap.get(p.productId) ?? null,
     }));
 
     return new Response(JSON.stringify({

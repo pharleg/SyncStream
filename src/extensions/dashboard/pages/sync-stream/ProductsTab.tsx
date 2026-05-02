@@ -20,6 +20,8 @@ interface ProductsTabProps {
   onApplyFix: (payload: ApplyFixPayload) => Promise<void>;
   onToggleAI: (productId: string, enabled: boolean) => Promise<void>;
   onEnhanceNow: (productId: string) => Promise<void>;
+  onPlatformChange?: (productId: string, platforms: ('gmc' | 'meta')[] | null) => Promise<void>;
+  onBulkPlatformChange?: (productIds: string[], platforms: ('gmc' | 'meta')[] | null) => Promise<void>;
   initialFilter?: 'all' | 'failed' | 'warnings' | 'synced';
   billingStatus?: BillingStatus | null;
 }
@@ -36,6 +38,8 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   onApplyFix,
   onToggleAI,
   onEnhanceNow,
+  onPlatformChange,
+  onBulkPlatformChange,
   initialFilter = 'all',
   billingStatus,
 }) => {
@@ -45,6 +49,7 @@ export const ProductsTab: FC<ProductsTabProps> = ({
   const [syncing, setSyncing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const syncBlocked = billingStatus?.plan === 'free' && products.length > 50;
 
@@ -97,6 +102,24 @@ export const ProductsTab: FC<ProductsTabProps> = ({
     try { await onRefreshFromWix(); } finally { setRefreshing(false); }
   };
 
+  const handleSelect = (productId: string, selected: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (selected) next.add(productId); else next.delete(productId);
+      return next;
+    });
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    setSelectedIds(selected ? new Set(filtered.map((p) => p.productId)) : new Set());
+  };
+
+  const handleBulkPlatform = async (platforms: ('gmc' | 'meta')[] | null) => {
+    if (!onBulkPlatformChange || selectedIds.size === 0) return;
+    await onBulkPlatformChange([...selectedIds], platforms);
+    setSelectedIds(new Set());
+  };
+
   if (loading) {
     return (
       <Box align="center" padding="60px">
@@ -147,6 +170,20 @@ export const ProductsTab: FC<ProductsTabProps> = ({
         </Button>
       </Box>
 
+      {/* Bulk action bar */}
+      {onBulkPlatformChange && selectedIds.size > 0 && (
+        <Box
+          gap="8px"
+          verticalAlign="middle"
+          style={{ padding: '8px 14px', background: '#eef2ff', borderRadius: 6, flexWrap: 'wrap' }}
+        >
+          <Text size="small" weight="bold">{selectedIds.size} selected</Text>
+          <Button size="small" skin="light" onClick={() => handleBulkPlatform(['gmc'])}>GMC Only</Button>
+          <Button size="small" skin="light" onClick={() => handleBulkPlatform(null)}>All Platforms</Button>
+          <Button size="small" skin="light" onClick={() => setSelectedIds(new Set())}>Clear</Button>
+        </Box>
+      )}
+
       {/* Table */}
       <Box
         direction="vertical"
@@ -160,9 +197,17 @@ export const ProductsTab: FC<ProductsTabProps> = ({
             background: '#f7f9fb',
             borderBottom: '1px solid #e8edf0',
             display: 'grid',
-            gridTemplateColumns: '36px 1fr 72px 72px 88px 64px',
+            gridTemplateColumns: onBulkPlatformChange ? '20px 36px 1fr 72px 72px 88px 64px' : '36px 1fr 72px 72px 88px 64px',
           }}
         >
+          {onBulkPlatformChange && (
+            <input
+              type="checkbox"
+              checked={filtered.length > 0 && filtered.every((p) => selectedIds.has(p.productId))}
+              onChange={(e) => handleSelectAll(e.target.checked)}
+              style={{ cursor: 'pointer', width: 14, height: 14, alignSelf: 'center' }}
+            />
+          )}
           <span />
           <Text size="tiny" secondary weight="bold">Product</Text>
           <Text size="tiny" secondary weight="bold">
@@ -190,10 +235,13 @@ export const ProductsTab: FC<ProductsTabProps> = ({
               key={product.productId}
               product={product}
               isExpanded={expandedId === product.productId}
+              isSelected={selectedIds.has(product.productId)}
               onExpand={setExpandedId}
+              onSelect={onBulkPlatformChange ? handleSelect : undefined}
               onApplyFix={onApplyFix}
               onToggleAI={onToggleAI}
               onEnhanceNow={onEnhanceNow}
+              onPlatformChange={onPlatformChange}
             />
           ))
         )}

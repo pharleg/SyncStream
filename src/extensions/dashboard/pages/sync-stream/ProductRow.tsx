@@ -1,6 +1,7 @@
 // src/extensions/dashboard/pages/sync-stream/ProductRow.tsx
 import { type FC, useState, useEffect } from 'react';
 import { Box, Text, Button, Input, FormField, ToggleSwitch, Loader } from '@wix/design-system';
+import { META_OAUTH_ENABLED } from '../../../../lib/constants';
 
 export interface ProductIssue {
   field: string;
@@ -33,6 +34,7 @@ export interface ProductRowData {
   enhancedTitle?: string | null;
   enhancedDescription?: string | null;
   lastEnhancedAt?: string | null;
+  platforms?: ('gmc' | 'meta')[] | null;
 }
 
 export interface ApplyFixPayload {
@@ -44,10 +46,13 @@ export interface ApplyFixPayload {
 interface ProductRowProps {
   product: ProductRowData;
   isExpanded: boolean;
+  isSelected?: boolean;
   onExpand: (productId: string | null) => void;
+  onSelect?: (productId: string, selected: boolean) => void;
   onApplyFix: (payload: ApplyFixPayload) => Promise<void>;
   onToggleAI: (productId: string, enabled: boolean) => Promise<void>;
   onEnhanceNow: (productId: string) => Promise<void>;
+  onPlatformChange?: (productId: string, platforms: ('gmc' | 'meta')[] | null) => Promise<void>;
 }
 
 const FIXABLE_FIELDS = ['brand', 'description', 'title', 'condition', 'link', 'imageLink', 'offerId'];
@@ -82,7 +87,8 @@ const ExpandedPanel: FC<{
   onApplyFix: (payload: ApplyFixPayload) => Promise<void>;
   onToggleAI: (productId: string, enabled: boolean) => Promise<void>;
   onEnhanceNow: (productId: string) => Promise<void>;
-}> = ({ product, onApplyFix, onToggleAI, onEnhanceNow }) => {
+  onPlatformChange?: (productId: string, platforms: ('gmc' | 'meta')[] | null) => Promise<void>;
+}> = ({ product, onApplyFix, onToggleAI, onEnhanceNow, onPlatformChange }) => {
   const allIssues = [...product.gmcIssues, ...product.metaIssues];
   const fixableIssues = allIssues.filter((i) => FIXABLE_FIELDS.includes(i.field));
   const uniqueFixableFields = [...new Set(fixableIssues.map((i) => i.field))];
@@ -118,6 +124,20 @@ const ExpandedPanel: FC<{
   const [enhancing, setEnhancing] = useState(false);
   // Auto-enable preview when enhanced description exists (handles post-enhance reload)
   const [aiPreview, setAiPreview] = useState(product.aiEnabled || !!product.enhancedDescription);
+  const [localPlatforms, setLocalPlatforms] = useState<('gmc' | 'meta')[] | null>(product.platforms ?? null);
+
+  const gmcOn = localPlatforms === null || localPlatforms.includes('gmc');
+  const metaOn = localPlatforms === null || localPlatforms.includes('meta');
+
+  const handlePlatformToggle = (platform: 'gmc' | 'meta', on: boolean) => {
+    const current = localPlatforms ?? ['gmc', 'meta'];
+    const next = on
+      ? ([...current.filter((p) => p !== platform), platform] as ('gmc' | 'meta')[])
+      : (current.filter((p) => p !== platform) as ('gmc' | 'meta')[]);
+    const newPlatforms: ('gmc' | 'meta')[] | null = next.length === 2 ? null : next;
+    setLocalPlatforms(newPlatforms);
+    onPlatformChange?.(product.productId, newPlatforms);
+  };
 
   useEffect(() => {
     if (product.enhancedDescription) setAiPreview(true);
@@ -292,6 +312,27 @@ const ExpandedPanel: FC<{
           </Button>
         )}
       </Box>
+
+      {/* Column 4: Sync Platforms */}
+      {onPlatformChange && (
+        <Box direction="vertical" style={{ flex: '0 0 148px' }} gap="8px">
+          <Text size="small" weight="bold">Sync Platforms</Text>
+          <Box gap="8px" verticalAlign="middle">
+            <ToggleSwitch size="small" checked={gmcOn} onChange={(e) => handlePlatformToggle('gmc', e.target.checked)} />
+            <Text size="small">Google Merchant</Text>
+          </Box>
+          <Box gap="8px" verticalAlign="middle">
+            <ToggleSwitch size="small" checked={metaOn} disabled={!META_OAUTH_ENABLED} onChange={(e) => handlePlatformToggle('meta', e.target.checked)} />
+            <Text size="small" secondary>Meta Catalog</Text>
+          </Box>
+          {!META_OAUTH_ENABLED && (
+            <Text size="tiny" secondary>Meta sync coming soon.</Text>
+          )}
+          {localPlatforms !== null && localPlatforms.length === 0 && (
+            <Text size="tiny" skin="error">No platforms selected — product won't sync.</Text>
+          )}
+        </Box>
+      )}
       </Box>
     </Box>
   );
@@ -300,10 +341,13 @@ const ExpandedPanel: FC<{
 export const ProductRow: FC<ProductRowProps> = ({
   product,
   isExpanded,
+  isSelected,
   onExpand,
+  onSelect,
   onApplyFix,
   onToggleAI,
   onEnhanceNow,
+  onPlatformChange,
 }) => {
   const allIssues = [...product.gmcIssues, ...product.metaIssues];
   const hasErrors = allIssues.some((i) => i.severity === 'error');
@@ -324,6 +368,18 @@ export const ProductRow: FC<ProductRowProps> = ({
         }}
         onClick={() => onExpand(isExpanded ? null : product.productId)}
       >
+        {/* Bulk select checkbox */}
+        {onSelect && (
+          <Box verticalAlign="middle" style={{ paddingTop: 6, flexShrink: 0 }}>
+            <input
+              type="checkbox"
+              checked={!!isSelected}
+              onChange={(e) => { e.stopPropagation(); onSelect(product.productId, e.target.checked); }}
+              onClick={(e) => e.stopPropagation()}
+              style={{ cursor: 'pointer', width: 14, height: 14 }}
+            />
+          </Box>
+        )}
         {/* Thumbnail */}
         <Box align="center" verticalAlign="middle" style={{ width: 32, height: 32, borderRadius: 4, flexShrink: 0, overflow: 'hidden', background: '#e8edf0' }}>
           {product.imageUrl ? (
@@ -408,6 +464,7 @@ export const ProductRow: FC<ProductRowProps> = ({
           onApplyFix={onApplyFix}
           onToggleAI={onToggleAI}
           onEnhanceNow={onEnhanceNow}
+          onPlatformChange={onPlatformChange}
         />
       )}
     </Box>
