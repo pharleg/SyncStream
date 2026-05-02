@@ -1,0 +1,14 @@
+{
+  "blockedBy": [
+    "T-002"
+  ],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "Only billingService.test.ts exists. Add vitest coverage for: (1) validator.ts — GMC and Meta required field checks, (2) productMapper.ts — both platforms with edge cases (missing SKU fallback to parentId_variantId, no variants, HTML stripped from description), (3) syncService.ts — idempotency assertion (push same product twice = no duplicate). Meta mapper tests require T-002 to be wired first.",
+  "id": "T-007",
+  "order": 30,
+  "phase": "app-market-launch",
+  "status": "open",
+  "title": "Pre-launch QA: test coverage for syncService + validator",
+  "type": "task"
+}

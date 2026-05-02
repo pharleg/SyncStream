@@ -1,0 +1,49 @@
+{
+  "blockers": [],
+  "date": "2026-05-01",
+  "phases": [
+    {
+      "description": "CLI init, scaffold, Wix data collections (SyncState, AppConfig), permissions, and project architecture. Establishes the Wix CLI TypeScript monorepo structure and backend/frontend separation.",
+      "id": "foundation",
+      "label": "PHASE 1",
+      "name": "Foundation",
+      "summary": "CLI scaffold, data model, permissions"
+    },
+    {
+      "description": "GMC OAuth (two-phase Cloudflare Worker relay), productMapper for GMC, validator, gmcClient, and full catalog sync. Phase 2 is the shippable GMC-only MVP.",
+      "id": "gmc-mvp",
+      "label": "PHASE 2",
+      "name": "GMC MVP",
+      "summary": "GMC OAuth, mapper, validator, full sync"
+    },
+    {
+      "description": "Webhook handlers (product created/updated/deleted), incremental sync via Wix product events, SyncState writes, and the sync status dashboard page.",
+      "id": "incremental-sync",
+      "label": "PHASE 3",
+      "name": "Incremental Sync",
+      "summary": "Webhooks, SyncState, status dashboard"
+    },
+    {
+      "description": "Compliance check standalone feature, rulesEngine, filterEngine, FixWizard fix-staging UI, compliance-apply-wix/gmc, AI description enhancement via Anthropic, and multi-variant SKU sync back to Wix.",
+      "id": "compliance-workbench",
+      "label": "PHASE 4",
+      "name": "Compliance Workbench",
+      "summary": "Rules engine, fix wizard, AI enhancement"
+    },
+    {
+      "description": "Meta OAuth two-phase flow, dual-platform sync via metaClient, Wix paid plan billing integration, and per-product platform targeting UI in the Products tab.",
+      "id": "meta-billing",
+      "label": "PHASE 5",
+      "name": "Meta + Billing",
+      "summary": "Meta sync, billing gating, platform UI"
+    },
+    {
+      "description": "Field mapping UI for brand/gtin/mpn custom fields, App Market listing submission, pre-launch test coverage, webhook reliability hardening, and final production cleanup.",
+      "id": "app-market-launch",
+      "label": "PHASE 6",
+      "name": "App Market Launch",
+      "summary": "Field mapping, listing, QA, launch"
+    }
+  ],
+  "title": "sync-stream.app"
+}

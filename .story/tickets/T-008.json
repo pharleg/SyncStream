@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "Product webhook handlers currently have no retry or failure tracking. If a webhook fires during a sync error the event is silently lost. Add: (1) retry wrapper in the webhook handler with exponential backoff, (2) write failures to SyncState.errorLog with timestamp and event payload, (3) surface missed-event warnings in the status dashboard. Consider rate limiting if Wix fires many events in a burst.",
+  "id": "T-008",
+  "order": 40,
+  "phase": "app-market-launch",
+  "status": "open",
+  "title": "Webhook reliability: retry logic + dead-letter handling",
+  "type": "task"
+}

@@ -1,0 +1,14 @@
+{
+  "blockedBy": [
+    "T-005"
+  ],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "Prepare the Wix App Market submission: app name, tagline, feature list, 5+ screenshots covering key flows (connect, dashboard, compliance workbench, fix wizard, field mapping), category/subcategory selection, privacy policy URL, and support contact. Screenshots should be taken after field mapping UI is complete so all features are represented.",
+  "id": "T-006",
+  "order": 20,
+  "phase": "app-market-launch",
+  "status": "open",
+  "title": "App Market listing: screenshots, description, category",
+  "type": "chore"
+}

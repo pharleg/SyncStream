@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "mapping.tsx exists but the full mapping UX needs: (1) dropdowns to map brand/gtin/mpn to merchant's existing Wix custom product fields, (2) store-level defaults (e.g. condition: 'new' for all products), (3) save fieldMappings to AppConfig in Wix Data. productMapper.ts must consume these mappings at sync time rather than relying on hardcoded fallbacks. This is the Phase 5 CLAUDE.md feature.",
+  "id": "T-005",
+  "order": 10,
+  "phase": "app-market-launch",
+  "status": "open",
+  "title": "Complete field mapping UI (brand/gtin/mpn custom fields)",
+  "type": "feature"
+}

@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "Mirror the GMC OAuth two-phase Cloudflare Worker relay for Meta. Implement: (1) meta-oauth-init.ts endpoint that constructs the Meta OAuth URL with catalog permissions, (2) connect.tsx Meta entry point similar to GMC's connect UI, (3) Cloudflare Worker callback handler that exchanges the code and stores the token in Supabase, (4) meta-complete-oauth.ts polling endpoint that finalizes and stores access/refresh tokens in Wix Secrets Manager under namespaced keys.",
+  "id": "T-001",
+  "order": 10,
+  "phase": "meta-billing",
+  "status": "open",
+  "title": "Complete Meta OAuth two-phase flow",
+  "type": "task"
+}

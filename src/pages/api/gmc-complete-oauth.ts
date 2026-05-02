@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
 import { secrets } from '@wix/secrets';
 import { createClient } from '@supabase/supabase-js';
-import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens } from '../../backend/oauthService';
-import { registerGcpProject, createDataSource } from '../../backend/gmcClient';
+import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens, storeMerchantId } from '../../backend/oauthService';
+import { fetchMerchantId, registerGcpProject, createDataSource } from '../../backend/gmcClient';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 import { requireAuth } from '../../lib/requireAuth';
 
@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request }) => {
       .single();
 
     if (error || !data) {
-      return new Response(JSON.stringify({ connected: false }), {
+      return new Response(JSON.stringify({ connected: false, debug_instanceId: instanceId, debug_error: error?.message }), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
@@ -39,9 +39,10 @@ export const POST: APIRoute = async ({ request }) => {
     await handleGmcCallback(instanceId, data.code);
 
     const accessToken = await getValidGmcAccessToken(instanceId);
-    const tokens = await getGmcTokens(instanceId);
-    await registerGcpProject(tokens.merchantId, accessToken);
-    const dataSourceId = await createDataSource(tokens.merchantId, accessToken);
+    const merchantId = await fetchMerchantId(accessToken);
+    await storeMerchantId(instanceId, merchantId);
+    await registerGcpProject(merchantId, accessToken);
+    const dataSourceId = await createDataSource(merchantId, accessToken);
 
     let config = await getAppConfig(instanceId);
     if (!config) {

@@ -1,0 +1,14 @@
+{
+  "blockedBy": [
+    "T-001"
+  ],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "metaClient.ts exists but syncService.ts currently routes only to GMC. Add the dual-platform path: syncService calls metaClient when a product's SyncState.platforms includes 'meta', productMapper.toMeta() generates the Graph API catalog payload, and the result writes to SyncState with platform='meta'. Validate against the Meta Graph API catalog endpoint with a test product before marking complete.",
+  "id": "T-002",
+  "order": 20,
+  "phase": "meta-billing",
+  "status": "open",
+  "title": "Wire metaClient full sync to syncService",
+  "type": "task"
+}

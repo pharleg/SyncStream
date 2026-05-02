@@ -43,16 +43,18 @@ async function callGetBillingStatus(): Promise<{ plan: 'free' | 'pro' } | null> 
   return response.json();
 }
 
-async function callCompleteGmcOAuth(): Promise<boolean> {
+async function callCompleteGmcOAuth(): Promise<{ connected: boolean; error?: string }> {
   try {
     const response = await connectFetch('/api/gmc-complete-oauth', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     });
     const data = await response.json();
-    return data.connected === true;
-  } catch {
-    return false;
+    if (!response.ok) return { connected: false, error: data.error ?? `HTTP ${response.status}` };
+    if (!data.connected && data.debug_instanceId) return { connected: false, error: `No pending code for instanceId: ${data.debug_instanceId} (supabase: ${data.debug_error ?? 'no row'})` };
+    return { connected: data.connected === true };
+  } catch (e) {
+    return { connected: false, error: e instanceof Error ? e.message : String(e) };
   }
 }
 
@@ -69,12 +71,15 @@ const ConnectPage: FC = () => {
 
   useEffect(() => {
     Promise.all([callGetAppConfig(), callGetBillingStatus(), callCompleteGmcOAuth()])
-      .then(([config, billing, gmcJustConnected]) => {
+      .then(([config, billing, gmcResult]) => {
         if (config) {
-          setGmcConnected(config.gmcConnected || gmcJustConnected);
+          setGmcConnected(config.gmcConnected || gmcResult.connected);
           setMetaConnected(config.metaConnected ?? false);
-        } else if (gmcJustConnected) {
+        } else if (gmcResult.connected) {
           setGmcConnected(true);
+        }
+        if (!gmcResult.connected && gmcResult.error) {
+          setError(`GMC OAuth error: ${gmcResult.error}`);
         }
         if (billing) {
           setPlan(billing.plan);

@@ -1,0 +1,12 @@
+{
+  "blockedBy": [],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "billingService.ts scaffolding exists. Wire it to Wix pricing plans: define plan tiers (free tier product limit, paid tier unlimited), hook billing-webhook.ts to plan change events from Wix, gate sync features in syncService behind plan checks, and surface plan status in the dashboard via the existing billing-status.ts endpoint. Decisions needed: exact tier names and product count limits.",
+  "id": "T-003",
+  "order": 30,
+  "phase": "meta-billing",
+  "status": "open",
+  "title": "Connect billingService to Wix paid plans",
+  "type": "task"
+}

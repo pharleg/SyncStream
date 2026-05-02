@@ -1,0 +1,15 @@
+{
+  "blockedBy": [
+    "T-006",
+    "T-007"
+  ],
+  "completedDate": null,
+  "createdDate": "2026-05-01",
+  "description": "Pre-launch production cleanup: remove any hardcoded test instanceIds or merchant IDs, audit Wix App Dashboard permissions match the CLAUDE.md required list, verify wix.config.json appId is the production app, remove debug logging that could leak token or product data, and confirm Secrets Manager keys are correctly namespaced for production. Do this after features and QA are done.",
+  "id": "T-009",
+  "order": 50,
+  "phase": "app-market-launch",
+  "status": "open",
+  "title": "Remove dev-only code, audit permissions, finalize wix.config",
+  "type": "chore"
+}

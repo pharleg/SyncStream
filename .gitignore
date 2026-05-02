@@ -25,3 +25,11 @@ npm-debug.log*
 .idea/
 out
 .worktrees/
+
+# storybloq
+.story/snapshots/
+.story/sessions/
+.story/status.json
+
+# brainstorm companion
+.superpowers/
