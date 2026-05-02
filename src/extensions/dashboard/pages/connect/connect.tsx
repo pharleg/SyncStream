@@ -11,6 +11,7 @@ import {
 } from '@wix/design-system';
 import '@wix/design-system/styles.global.css';
 import { httpClient } from '@wix/essentials';
+import { META_OAUTH_ENABLED } from '../../../../lib/constants';
 
 function connectFetch(path: string, init?: RequestInit): Promise<Response> {
   const url = new URL(path, new URL(import.meta.url).origin).toString();
@@ -37,12 +38,6 @@ async function callGetAppConfig(): Promise<{
   return response.json();
 }
 
-async function callGetBillingStatus(): Promise<{ plan: 'free' | 'pro' } | null> {
-  const response = await connectFetch('/api/billing-status');
-  if (!response.ok) return null;
-  return response.json();
-}
-
 async function callCompleteGmcOAuth(): Promise<{ connected: boolean; error?: string }> {
   try {
     const response = await connectFetch('/api/gmc-complete-oauth', {
@@ -51,7 +46,7 @@ async function callCompleteGmcOAuth(): Promise<{ connected: boolean; error?: str
     });
     const data = await response.json();
     if (!response.ok) return { connected: false, error: data.error ?? `HTTP ${response.status}` };
-    if (!data.connected && data.debug_instanceId) return { connected: false, error: `No pending code for instanceId: ${data.debug_instanceId} (supabase: ${data.debug_error ?? 'no row'})` };
+    if (!data.connected && data.debug_instanceId) return { connected: false };
     return { connected: data.connected === true };
   } catch (e) {
     return { connected: false, error: e instanceof Error ? e.message : String(e) };
@@ -63,15 +58,11 @@ const ConnectPage: FC = () => {
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // null = unknown/loading (billing fetch hasn't resolved or failed)
-  // 'free' = confirmed free plan (show upgrade wall)
-  // 'pro' = confirmed pro plan (show Meta connect card)
-  const [plan, setPlan] = useState<'free' | 'pro' | null>(null);
   const [metaConnected, setMetaConnected] = useState(false);
 
   useEffect(() => {
-    Promise.all([callGetAppConfig(), callGetBillingStatus(), callCompleteGmcOAuth()])
-      .then(([config, billing, gmcResult]) => {
+    Promise.all([callGetAppConfig(), callCompleteGmcOAuth()])
+      .then(([config, gmcResult]) => {
         if (config) {
           setGmcConnected(config.gmcConnected || gmcResult.connected);
           setMetaConnected(config.metaConnected ?? false);
@@ -79,10 +70,7 @@ const ConnectPage: FC = () => {
           setGmcConnected(true);
         }
         if (!gmcResult.connected && gmcResult.error) {
-          setError(`GMC OAuth error: ${gmcResult.error}`);
-        }
-        if (billing) {
-          setPlan(billing.plan);
+          setError('Google Merchant Center connection failed. Please try again.');
         }
       })
       .catch(() => {})
@@ -160,47 +148,40 @@ const ConnectPage: FC = () => {
               />
             </Card>
 
-            {plan !== 'free' ? (
-              // Pro or unknown (billing fetch failed): show connect card so Pro users aren't blocked
-              <Card>
-                <Card.Header
-                  title="Meta Product Catalog"
-                  subtitle={
-                    metaConnected
-                      ? 'Connected'
-                      : 'Connect to sync products to Meta Shopping'
-                  }
-                  suffix={
-                    metaConnected ? (
-                      <Text size="small" skin="success" weight="bold">
-                        Connected
-                      </Text>
-                    ) : (
-                      <Button size="small" disabled>
-                        Connect
-                      </Button>
-                    )
-                  }
-                />
-              </Card>
-            ) : (
-              // Explicitly confirmed free plan: show upgrade wall
-              <Card>
-                <Card.Header
-                  title="Meta Product Catalog"
-                  subtitle="Available on Pro plan"
-                  suffix={
-                    <Button
-                      size="small"
-                      skin="light"
-                      onClick={() => window.open('https://manage.wix.com/app-market', '_blank')}
+            <Card>
+              <Card.Header
+                title="Meta Product Catalog"
+                subtitle={
+                  metaConnected
+                    ? 'Connected'
+                    : META_OAUTH_ENABLED
+                    ? 'Connect to sync products to Meta Shopping'
+                    : 'Available soon — connect GMC first to get started'
+                }
+                suffix={
+                  metaConnected ? (
+                    <Text size="small" skin="success" weight="bold">Connected</Text>
+                  ) : META_OAUTH_ENABLED ? (
+                    <Button size="small" disabled>Connect</Button>
+                  ) : (
+                    <Text
+                      size="tiny"
+                      weight="bold"
+                      style={{
+                        background: '#eaf4ff',
+                        color: '#116dff',
+                        border: '1px solid #c5deff',
+                        borderRadius: 100,
+                        padding: '3px 10px',
+                        letterSpacing: 0.3,
+                      }}
                     >
-                      Upgrade to Pro
-                    </Button>
-                  }
-                />
-              </Card>
-            )}
+                      COMING SOON
+                    </Text>
+                  )
+                }
+              />
+            </Card>
           </Box>
         </Page.Content>
       </Page>
