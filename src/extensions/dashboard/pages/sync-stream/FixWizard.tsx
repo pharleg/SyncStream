@@ -11,7 +11,7 @@ import {
   Loader,
   SectionHelper,
 } from '@wix/design-system';
-import { httpClient } from '@wix/essentials';
+import { appFetch } from '../../../../lib/appFetch';
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -70,13 +70,6 @@ const CONDITION_OPTIONS = [
   { id: 'used', value: 'Used' },
 ];
 
-// ── appFetch helper (mirrors sync-stream.tsx) ─────────────────────────────
-
-async function appFetch(path: string, init?: RequestInit): Promise<Response> {
-  const baseUrl = new URL(import.meta.url).origin;
-  return httpClient.fetchWithAuth(`${baseUrl}${path}`, init);
-}
-
 // ── FixWizard ──────────────────────────────────────────────────────────────
 
 export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete, onSyncNow }) => {
@@ -104,7 +97,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
     const load = async () => {
       try {
         setLoadingCompliance(true);
-        const res = await appFetch('/api/products?instanceId=default');
+        const res = await appFetch('/api/products');
         const data = await res.json();
         if (data.error) throw new Error(data.error);
 
@@ -221,7 +214,7 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
       const res = await appFetch('/api/wizard-generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ productId: currentP2Product.productId, instanceId: 'default' }),
+        body: JSON.stringify({ productId: currentP2Product.productId }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -248,7 +241,6 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
           type: 'global',
           field: currentP1Step.field,
           value: inputValue.trim(),
-          instanceId: 'default',
         }),
       });
       const data = await res.json();
@@ -274,7 +266,6 @@ export const FixWizard: FC<FixWizardProps> = ({ issueGroups, config, onComplete,
           type: 'product',
           productId: currentP2Product.productId,
           [field]: inputValue.trim(),
-          instanceId: 'default',
         }),
       });
       const data = await res.json();

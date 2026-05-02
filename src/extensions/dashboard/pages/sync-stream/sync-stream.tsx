@@ -1698,9 +1698,6 @@ const SyncStreamPage: FC = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
       }).catch(() => null);
-      if (oauthRes && !oauthRes.ok) {
-        await oauthRes.json().catch(() => ({}));
-      }
 
       const [configRes, billingRes] = await Promise.all([
         appFetch('/api/app-config'),
