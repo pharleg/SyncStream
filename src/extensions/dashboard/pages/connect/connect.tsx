@@ -108,7 +108,7 @@ const ConnectPage: FC = () => {
     setError(null);
     try {
       const authUrl = await callInitiateGmcOAuth();
-      window.location.href = authUrl;
+      window.top!.location.href = authUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start OAuth flow');
       setConnecting(null);
@@ -120,7 +120,7 @@ const ConnectPage: FC = () => {
     setError(null);
     try {
       const authUrl = await callInitiateMetaOAuth();
-      window.location.href = authUrl;
+      window.top!.location.href = authUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to start Meta OAuth flow');
       setConnecting(null);
