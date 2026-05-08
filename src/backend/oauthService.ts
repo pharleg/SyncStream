@@ -217,7 +217,7 @@ export async function getValidGmcTokens(
 
 const META_AUTH_URL = 'https://www.facebook.com/v19.0/dialog/oauth';
 const META_TOKEN_URL = 'https://graph.facebook.com/v19.0/oauth/access_token';
-const META_SCOPE = 'catalog_management,business_management';
+const META_SCOPE = 'catalog_management';
 
 async function getMetaClientCredentials(): Promise<{
   clientId: string;
