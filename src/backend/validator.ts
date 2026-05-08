@@ -200,11 +200,26 @@ export function validateGmc(
 }
 
 export function validateMeta(
-  _product: MetaProduct,
-  _productId: string,
+  product: MetaProduct,
+  productId: string,
 ): ValidationError[] {
-  // TODO Phase 4: implement Meta validation
-  return [];
+  const errors: ValidationError[] = [];
+
+  const requiredFields: (keyof MetaProduct)[] = [
+    'title', 'description', 'availability', 'condition', 'price', 'link', 'imageLink', 'retailerId',
+  ];
+  for (const field of requiredFields) {
+    const val = product[field] as string | undefined;
+    if (!val || val.trim() === '') {
+      errors.push({ field: String(field), platform: 'meta', message: `${String(field)} is required`, productId, severity: 'error' });
+    }
+  }
+
+  if (product.price && !/^\d+(\.\d{1,2})?\s+[A-Z]{3}$/.test(product.price)) {
+    errors.push({ field: 'price', platform: 'meta', message: 'Price must be in format "14.99 USD"', productId, severity: 'error' });
+  }
+
+  return errors;
 }
 
 /**

@@ -27,20 +27,60 @@ export async function fetchMetaCatalogId(accessToken: string): Promise<string> {
   return catalogs.data[0].id;
 }
 
+export async function batchUpsertMetaProducts(
+  catalogId: string,
+  products: MetaProduct[],
+  accessToken: string,
+): Promise<{ retailerId: string; success: boolean; error?: string }[]> {
+  const requests = products.map((p) => ({
+    method: 'UPDATE',
+    retailer_id: p.retailerId,
+    data: {
+      name: p.title,
+      description: p.description,
+      availability: p.availability,
+      condition: p.condition,
+      price: p.price,
+      link: p.link,
+      image_link: p.imageLink,
+      brand: p.brand,
+    },
+  }));
+
+  const url = `${GRAPH_API}/${catalogId}/items_batch?access_token=${encodeURIComponent(accessToken)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests }),
+  });
+
+  if (!res.ok) {
+    const raw = await res.text();
+    return products.map((p) => ({ retailerId: p.retailerId, success: false, error: raw }));
+  }
+
+  return products.map((p) => ({ retailerId: p.retailerId, success: true }));
+}
+
 export async function upsertProduct(
-  _catalogId: string,
-  _product: MetaProduct,
-  _accessToken: string,
+  catalogId: string,
+  product: MetaProduct,
+  accessToken: string,
 ): Promise<MetaCatalogResponse> {
-  // TODO Phase 4: implement Meta upsert
-  throw new Error('Not implemented');
+  const [result] = await batchUpsertMetaProducts(catalogId, [product], accessToken);
+  return { id: result.retailerId, success: result.success, errors: result.error ? [{ code: 0, message: result.error, type: 'api' }] : undefined };
 }
 
 export async function deleteProduct(
-  _catalogId: string,
-  _retailerId: string,
-  _accessToken: string,
+  catalogId: string,
+  retailerId: string,
+  accessToken: string,
 ): Promise<void> {
-  // TODO Phase 4: implement Meta delete
-  throw new Error('Not implemented');
+  const url = `${GRAPH_API}/${catalogId}/items_batch?access_token=${encodeURIComponent(accessToken)}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requests: [{ method: 'DELETE', retailer_id: retailerId }] }),
+  });
+  if (!res.ok) throw new Error(`Meta delete failed: ${await res.text()}`);
 }

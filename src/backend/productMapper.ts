@@ -466,11 +466,46 @@ export function mapToGmc(
   });
 }
 
-export function mapToMeta(
-  _product: WixProduct,
-  _mappings: FieldMappings,
-  _siteUrl: string,
+export function mapFlattenedToMeta(
+  item: FlattenedProduct,
+  mappings: FieldMappings,
+  siteUrl: string,
+  enhanced?: { title?: string; description?: string },
 ): MetaProduct {
-  // TODO Phase 4: implement Meta mapping
-  throw new Error('Not implemented');
+  const { product, variant, isMultiVariant } = item;
+
+  const retailerId = buildOfferId(item.sku, item.parentId, item.itemId, isMultiVariant);
+
+  const rawTitle = enhanced?.title || product.name || '';
+  const title = truncate(rawTitle, 200);
+
+  const rawDesc = enhanced?.description || product.description || product.name || '';
+  const description = truncate(stripHtml(rawDesc), 9999) || title;
+
+  let availability: MetaProduct['availability'];
+  if (variant) {
+    availability = variant.inventoryStatus?.inStock !== false ? 'in stock' : 'out of stock';
+  } else {
+    availability = product.inventory?.availabilityStatus === 'OUT_OF_STOCK' ? 'out of stock' : 'in stock';
+  }
+
+  const condition = (resolveMappedField(product, 'condition', mappings) ?? 'new') as MetaProduct['condition'];
+
+  const { amountMicros, currencyCode } = extractPrice(product, variant);
+  const price = `${(Number(amountMicros) / 1_000_000).toFixed(2)} ${currencyCode}`;
+
+  const link = buildProductLink(product, siteUrl);
+  const imageLink = getImageLink(product, variant);
+  const brand = resolveMappedField(product, 'brand', mappings) ?? '';
+
+  return { id: retailerId, title, description, availability, condition, price, link, imageLink, brand, retailerId };
+}
+
+export function mapToMeta(
+  product: WixProduct,
+  mappings: FieldMappings,
+  siteUrl: string,
+): MetaProduct {
+  const [item] = flattenVariants(product);
+  return mapFlattenedToMeta(item, mappings, siteUrl);
 }

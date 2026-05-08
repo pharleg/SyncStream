@@ -14,13 +14,17 @@ import type {
 } from '../types/sync.types';
 import type { WixProduct, SyncState, ValidationError } from '../types/wix.types';
 import type { GmcProductInput } from '../types/gmc.types';
-import { flattenVariants, mapFlattenedToGmc } from './productMapper';
-import { validateGmc } from './validator';
+import type { MetaProduct } from '../types/meta.types';
+import { flattenVariants, mapFlattenedToGmc, mapFlattenedToMeta } from './productMapper';
+import { validateGmc, validateMeta } from './validator';
 import { batchInsertProducts } from './gmcClient';
+import { batchUpsertMetaProducts } from './metaClient';
 import { applyFilters } from './filterEngine';
 import { applyRules } from './rulesEngine';
 import {
   getValidGmcTokens,
+  getMetaTokens,
+  getValidMetaAccessToken,
 } from './oauthService';
 import { checkSyncLimit, checkPlatformAccess } from './billingService';
 export { BillingError } from './billingService';
@@ -280,9 +284,54 @@ async function syncProductChunk(
   }
 
   if (platforms.includes('meta')) {
-    // Billing gate: Meta sync requires Pro plan
     await checkPlatformAccess(instanceId, 'meta');
-    // Meta push not yet implemented — gate is in place for when it is added
+
+    if (!config.metaConnected) throw new Error('Meta not connected. Please connect your account first.');
+
+    const metaTokens = await getMetaTokens(instanceId);
+    const metaAccessToken = await getValidMetaAccessToken(instanceId);
+    const catalogId = metaTokens.catalogId;
+    if (!catalogId) throw new Error('Meta catalog ID not set. Please reconnect your Meta account.');
+
+    const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
+    const metaFiltered = applyFilters(products, filters, 'meta');
+    const metaPlatformFiltered = metaFiltered.filter((p) => {
+      const id = p._id ?? p.id;
+      const targets = platformMap.get(id);
+      return targets === null || targets === undefined || targets.includes('meta');
+    });
+    const metaFlattened = metaPlatformFiltered.flatMap((p) => flattenVariants(p));
+
+    const validMetaProducts: MetaProduct[] = [];
+    const metaValidationFailures: SyncResult[] = [];
+    const retailerIdToParentId = new Map<string, string>();
+
+    for (const item of metaFlattened) {
+      const parentId = item.parentId;
+      const enhanced = enhancedMap.get(parentId);
+      const metaProduct = mapFlattenedToMeta(item, config.fieldMappings, siteUrl, enhanced);
+      retailerIdToParentId.set(metaProduct.retailerId, parentId);
+      const issues = validateMeta(metaProduct, parentId);
+      if (issues.some((e) => e.severity === 'error')) {
+        metaValidationFailures.push({ productId: parentId, platform: 'meta', success: false, errors: issues });
+      } else {
+        validMetaProducts.push(metaProduct);
+      }
+    }
+
+    results.push(...metaValidationFailures);
+
+    if (validMetaProducts.length > 0) {
+      const batchResults = await batchUpsertMetaProducts(catalogId, validMetaProducts, metaAccessToken);
+      for (const r of batchResults) {
+        const parentId = retailerIdToParentId.get(r.retailerId) ?? r.retailerId;
+        results.push(
+          r.success
+            ? { productId: parentId, platform: 'meta', success: true, externalId: r.retailerId }
+            : { productId: parentId, platform: 'meta', success: false, errors: [{ field: 'api', platform: 'meta' as const, message: r.error ?? 'Unknown error', productId: parentId, severity: 'error' as const }] },
+        );
+      }
+    }
   }
 
   // 7. Write SyncState records (deduplicate by productId+platform — multi-variant
@@ -480,9 +529,49 @@ export async function syncFromCache(
   }
 
   if (platforms.includes('meta')) {
-    // Billing gate: Meta sync requires Pro plan
     await checkPlatformAccess(instanceId, 'meta');
-    // Meta push not yet implemented — gate is in place for when it is added
+
+    if (!config.metaConnected) throw new Error('Meta not connected. Please connect your account first.');
+
+    const metaTokens = await getMetaTokens(instanceId);
+    const metaAccessToken = await getValidMetaAccessToken(instanceId);
+    const catalogId = metaTokens.catalogId;
+    if (!catalogId) throw new Error('Meta catalog ID not set. Please reconnect your Meta account.');
+
+    const siteUrl = config.fieldMappings['siteUrl']?.defaultValue ?? '';
+    const metaFiltered = applyFilters(products, filters, 'meta');
+    const metaFlattened = metaFiltered.flatMap((p) => flattenVariants(p));
+
+    const validMetaProducts: MetaProduct[] = [];
+    const metaValidationFailures: SyncResult[] = [];
+    const retailerIdToParentId = new Map<string, string>();
+
+    for (const item of metaFlattened) {
+      const parentId = item.parentId;
+      const enhanced = enhancedMap.get(parentId);
+      const metaProduct = mapFlattenedToMeta(item, config.fieldMappings, siteUrl, enhanced);
+      retailerIdToParentId.set(metaProduct.retailerId, parentId);
+      const issues = validateMeta(metaProduct, parentId);
+      if (issues.some((e) => e.severity === 'error')) {
+        metaValidationFailures.push({ productId: parentId, platform: 'meta', success: false, errors: issues });
+      } else {
+        validMetaProducts.push(metaProduct);
+      }
+    }
+
+    results.push(...metaValidationFailures);
+
+    if (validMetaProducts.length > 0) {
+      const batchResults = await batchUpsertMetaProducts(catalogId, validMetaProducts, metaAccessToken);
+      for (const r of batchResults) {
+        const parentId = retailerIdToParentId.get(r.retailerId) ?? r.retailerId;
+        results.push(
+          r.success
+            ? { productId: parentId, platform: 'meta', success: true, externalId: r.retailerId }
+            : { productId: parentId, platform: 'meta', success: false, errors: [{ field: 'api', platform: 'meta' as const, message: r.error ?? 'Unknown error', productId: parentId, severity: 'error' as const }] },
+        );
+      }
+    }
   }
 
   const stateMap2 = new Map<string, SyncState>();
