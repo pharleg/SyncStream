@@ -18,10 +18,18 @@ export const POST: APIRoute = async ({ request }) => {
       platforms?: Platform[];
     };
 
-    const result = await runPaginatedSync(
-      instanceId,
-      body.platforms ?? ['gmc'],
-    );
+    let platforms = body.platforms;
+    if (!platforms) {
+      // Auto-detect connected platforms from config
+      const { getAppConfig } = await import('../../backend/dataService');
+      const cfg = await getAppConfig(instanceId);
+      platforms = [];
+      if (cfg?.gmcConnected) platforms.push('gmc');
+      if (cfg?.metaConnected) platforms.push('meta');
+      if (platforms.length === 0) platforms = ['gmc'];
+    }
+
+    const result = await runPaginatedSync(instanceId, platforms);
 
     return new Response(JSON.stringify(result), {
       headers: { 'Content-Type': 'application/json' },
