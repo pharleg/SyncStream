@@ -10,12 +10,22 @@ import type { MetaProduct, MetaCatalogResponse } from '../types/meta.types';
 const GRAPH_API = 'https://graph.facebook.com/v19.0';
 
 export async function fetchMetaCatalogId(accessToken: string): Promise<string> {
+  // Try direct user catalogs first (works without Business Manager)
+  const directRes = await fetch(
+    `${GRAPH_API}/me/product_catalogs?fields=id,name&access_token=${accessToken}`,
+  );
+  if (directRes.ok) {
+    const direct = (await directRes.json()) as { data: { id: string; name: string }[] };
+    if (direct.data?.length) return direct.data[0].id;
+  }
+
+  // Fallback: Business Manager owned catalogs
   const bizRes = await fetch(
     `${GRAPH_API}/me/businesses?fields=id,name&access_token=${accessToken}`,
   );
-  if (!bizRes.ok) throw new Error(`Meta businesses fetch failed: ${await bizRes.text()}`);
+  if (!bizRes.ok) throw new Error(`No Meta Product Catalogs found — create one at business.facebook.com/commerce`);
   const biz = (await bizRes.json()) as { data: { id: string; name: string }[] };
-  if (!biz.data?.length) throw new Error('No Meta Business accounts found');
+  if (!biz.data?.length) throw new Error('No Meta Business accounts found — create a catalog at business.facebook.com/commerce');
 
   const businessId = biz.data[0].id;
   const catRes = await fetch(
@@ -23,7 +33,7 @@ export async function fetchMetaCatalogId(accessToken: string): Promise<string> {
   );
   if (!catRes.ok) throw new Error(`Meta catalogs fetch failed: ${await catRes.text()}`);
   const catalogs = (await catRes.json()) as { data: { id: string; name: string }[] };
-  if (!catalogs.data?.length) throw new Error('No Meta Product Catalogs found');
+  if (!catalogs.data?.length) throw new Error('No Meta Product Catalogs found — create one at business.facebook.com/commerce');
   return catalogs.data[0].id;
 }
 
