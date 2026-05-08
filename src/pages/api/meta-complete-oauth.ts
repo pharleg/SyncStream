@@ -43,9 +43,13 @@ export const POST: APIRoute = async ({ request }) => {
 
     await handleMetaCallback(instanceId, data.code);
 
-    const accessToken = await getValidMetaAccessToken(instanceId);
-    const catalogId = await fetchMetaCatalogId(accessToken);
-    await storeMetaCatalogId(instanceId, catalogId);
+    try {
+      const accessToken = await getValidMetaAccessToken(instanceId);
+      const catalogId = await fetchMetaCatalogId(accessToken);
+      await storeMetaCatalogId(instanceId, catalogId);
+    } catch (catalogErr) {
+      console.error('[meta-complete-oauth] catalog fetch failed (non-blocking):', catalogErr);
+    }
 
     let config = await getAppConfig(instanceId);
     if (!config) {
