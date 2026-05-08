@@ -237,7 +237,8 @@ const ConnectTab: FC<{
     setDisconnectingMeta(true);
     setError(null);
     try {
-      await saveAppConfig({ metaConnected: false });
+      const res = await appFetch('/api/meta-disconnect', { method: 'POST' });
+      if (!res.ok) throw new Error('Disconnect failed');
       setMetaCatalogs(null);
       setSelectedCatalogId('');
       setSelectedBizId('');
