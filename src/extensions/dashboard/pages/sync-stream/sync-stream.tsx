@@ -188,6 +188,10 @@ const ConnectTab: FC<{
 }> = ({ config, onRefresh, onTabChange }) => {
   const [connecting, setConnecting] = useState(false);
   const [connectingMeta, setConnectingMeta] = useState(false);
+  const [metaCatalogs, setMetaCatalogs] = useState<{ businesses: { id: string; name: string }[]; catalogs: { id: string; name: string; businessId?: string }[]; selectedCatalogId: string } | null>(null);
+  const [selectedBizId, setSelectedBizId] = useState('');
+  const [selectedCatalogId, setSelectedCatalogId] = useState('');
+  const [savingCatalog, setSavingCatalog] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [authCode, setAuthCode] = useState('');
   const [exchanging, setExchanging] = useState(false);
@@ -195,6 +199,37 @@ const ConnectTab: FC<{
   const [success, setSuccess] = useState(false);
 
   const [disconnecting, setDisconnecting] = useState(false);
+
+  useEffect(() => {
+    if (!config?.metaConnected) return;
+    appFetch('/api/meta-refresh-catalog')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data) return;
+        setMetaCatalogs(data);
+        setSelectedCatalogId(data.selectedCatalogId ?? '');
+        if (data.businesses?.length === 1) setSelectedBizId(data.businesses[0].id);
+      })
+      .catch(() => {});
+  }, [config?.metaConnected]);
+
+  const handleSaveCatalog = useCallback(async () => {
+    if (!selectedCatalogId) return;
+    setSavingCatalog(true);
+    try {
+      await appFetch('/api/meta-refresh-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ catalogId: selectedCatalogId }),
+      });
+      setMetaCatalogs((prev) => prev ? { ...prev, selectedCatalogId } : prev);
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save catalog');
+    } finally {
+      setSavingCatalog(false);
+    }
+  }, [selectedCatalogId, onRefresh]);
 
   const handleDisconnectGmc = useCallback(async () => {
     setDisconnecting(true);
@@ -309,7 +344,9 @@ const ConnectTab: FC<{
           title="Meta Product Catalog"
           subtitle={
             config?.metaConnected
-              ? 'Connected'
+              ? metaCatalogs?.selectedCatalogId
+                ? `Connected • Catalog: ${metaCatalogs.catalogs.find((c) => c.id === metaCatalogs.selectedCatalogId)?.name ?? metaCatalogs.selectedCatalogId}`
+                : 'Connected — select a catalog below'
               : 'Connect to sync products to Meta Shopping'
           }
           suffix={
@@ -336,6 +373,40 @@ const ConnectTab: FC<{
             )
           }
         />
+        {config?.metaConnected && metaCatalogs && !metaCatalogs.selectedCatalogId && (
+          <>
+            <Card.Divider />
+            <Card.Content>
+              <Box direction="vertical" gap="12px">
+                {metaCatalogs.businesses.length > 1 && (
+                  <FormField label="Business Portfolio">
+                    <Dropdown
+                      placeholder="Select a business portfolio"
+                      options={metaCatalogs.businesses.map((b) => ({ id: b.id, value: b.name }))}
+                      selectedId={selectedBizId || undefined}
+                      onSelect={(o) => { setSelectedBizId(String(o.id)); setSelectedCatalogId(''); }}
+                    />
+                  </FormField>
+                )}
+                <FormField label="Product Catalog">
+                  <Dropdown
+                    placeholder="Select a product catalog"
+                    options={metaCatalogs.catalogs
+                      .filter((c) => !selectedBizId || c.businessId === selectedBizId || !c.businessId)
+                      .map((c) => ({ id: c.id, value: c.name }))}
+                    selectedId={selectedCatalogId || undefined}
+                    onSelect={(o) => setSelectedCatalogId(String(o.id))}
+                  />
+                </FormField>
+                <Box>
+                  <Button size="small" onClick={handleSaveCatalog} disabled={!selectedCatalogId || savingCatalog}>
+                    {savingCatalog ? 'Saving...' : 'Save Catalog'}
+                  </Button>
+                </Box>
+              </Box>
+            </Card.Content>
+          </>
+        )}
       </Card>
     </Box>
   );
