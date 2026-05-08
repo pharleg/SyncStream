@@ -131,7 +131,7 @@ async function triggerSync(): Promise<{ total: number; synced: number; failed: n
   const response = await appFetch('/api/sync-trigger', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ platforms: ['gmc'] }),
+    body: JSON.stringify({}),
   });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
