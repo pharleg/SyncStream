@@ -223,22 +223,24 @@ async function getMetaClientCredentials(): Promise<{
   clientId: string;
   clientSecret: string;
   redirectUri: string;
+  configId: string;
 }> {
-  const [clientId, clientSecret, redirectUri] = await Promise.all([
+  const [clientId, clientSecret, redirectUri, configId] = await Promise.all([
     getSecret('meta_client_id'),
     getSecret('meta_client_secret'),
     getSecret('meta_redirect_uri'),
+    getSecret('meta_config_id'),
   ]);
-  return { clientId, clientSecret, redirectUri };
+  return { clientId, clientSecret, redirectUri, configId };
 }
 
 export async function initiateMetaOAuth(instanceId: string): Promise<string> {
-  const { clientId, redirectUri } = await getMetaClientCredentials();
+  const { clientId, redirectUri, configId } = await getMetaClientCredentials();
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: META_SCOPE,
+    config_id: configId,
     state: `${instanceId}|meta`,
   });
   return `${META_AUTH_URL}?${params.toString()}`;
