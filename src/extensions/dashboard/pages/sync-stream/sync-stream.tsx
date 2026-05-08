@@ -196,12 +196,6 @@ const ConnectTab: FC<{
 
   const [disconnecting, setDisconnecting] = useState(false);
 
-  useEffect(() => {
-    callCompleteMetaOAuth().then(({ connected }) => {
-      if (connected) onRefresh();
-    });
-  }, [onRefresh]);
-
   const handleDisconnectGmc = useCallback(async () => {
     setDisconnecting(true);
     setError(null);
@@ -1762,11 +1756,11 @@ const SyncStreamPage: FC = () => {
 
   const loadConfig = useCallback(async () => {
     try {
-      // Complete pending GMC OAuth if present — no-op if no pending code (fast Supabase read)
-      const oauthRes = await appFetch('/api/gmc-complete-oauth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      }).catch(() => null);
+      // Complete pending OAuth if present — no-op if no pending code (fast Supabase read)
+      await Promise.all([
+        appFetch('/api/gmc-complete-oauth', { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => null),
+        appFetch('/api/meta-complete-oauth', { method: 'POST', headers: { 'Content-Type': 'application/json' } }).catch(() => null),
+      ]);
 
       const [configRes, billingRes] = await Promise.all([
         appFetch('/api/app-config'),
