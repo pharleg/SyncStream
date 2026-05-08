@@ -231,6 +231,24 @@ const ConnectTab: FC<{
     }
   }, [selectedCatalogId, onRefresh]);
 
+  const [disconnectingMeta, setDisconnectingMeta] = useState(false);
+
+  const handleDisconnectMeta = useCallback(async () => {
+    setDisconnectingMeta(true);
+    setError(null);
+    try {
+      await saveAppConfig({ metaConnected: false });
+      setMetaCatalogs(null);
+      setSelectedCatalogId('');
+      setSelectedBizId('');
+      await onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to disconnect');
+    } finally {
+      setDisconnectingMeta(false);
+    }
+  }, [onRefresh]);
+
   const handleDisconnectGmc = useCallback(async () => {
     setDisconnecting(true);
     setError(null);
@@ -351,7 +369,17 @@ const ConnectTab: FC<{
           }
           suffix={
             config?.metaConnected ? (
-              <Text size="small" skin="success" weight="bold">Connected</Text>
+              <Box gap="12px" verticalAlign="middle">
+                <Text size="small" skin="success" weight="bold">Connected</Text>
+                <Button
+                  size="small"
+                  skin="light"
+                  onClick={handleDisconnectMeta}
+                  disabled={disconnectingMeta}
+                >
+                  {disconnectingMeta ? 'Disconnecting…' : 'Disconnect'}
+                </Button>
+              </Box>
             ) : (
               <Button
                 size="small"
