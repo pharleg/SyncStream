@@ -2,11 +2,14 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const code = url.searchParams.get('code');
-    const instanceId = url.searchParams.get('state') ?? 'default';
+    const rawState = url.searchParams.get('state') ?? 'default';
 
     if (!code) {
       return new Response('Missing authorization code', { status: 400 });
     }
+
+    // state format: "instanceId" (GMC) or "instanceId|platform" (Meta+future)
+    const [instanceId, platform = 'gmc'] = rawState.split('|');
 
     const res = await fetch(`${env.SUPABASE_URL}/rest/v1/pending_oauth`, {
       method: 'POST',
@@ -16,7 +19,7 @@ export default {
         'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates',
       },
-      body: JSON.stringify({ instance_id: instanceId, code }),
+      body: JSON.stringify({ instance_id: instanceId, platform, code }),
     });
 
     if (!res.ok) {

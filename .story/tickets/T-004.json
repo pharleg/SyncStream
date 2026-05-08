@@ -2,13 +2,13 @@
   "blockedBy": [
     "T-002"
   ],
-  "completedDate": null,
+  "completedDate": "2026-05-07",
   "createdDate": "2026-05-01",
   "description": "The backend product-platforms.ts API exists to record which platforms each product syncs to. Products tab needs: per-row GMC/Meta platform toggles, bulk select, and save. Changes write to SyncState.platforms[]. Deselecting a platform stops future syncs — no delete call needed, platforms expire stale listings naturally (~24h GMC, ~30d Meta).",
   "id": "T-004",
   "order": 40,
   "phase": "meta-billing",
-  "status": "open",
+  "status": "complete",
   "title": "Per-product platform targeting UI in Products tab",
   "type": "task"
 }

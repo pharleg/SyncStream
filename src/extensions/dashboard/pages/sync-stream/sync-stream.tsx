@@ -147,6 +147,26 @@ async function callInitiateGmcOAuth(): Promise<string> {
   return data.authUrl;
 }
 
+async function callInitiateMetaOAuth(): Promise<string> {
+  const response = await appFetch('/api/meta-oauth-init');
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error);
+  return data.authUrl;
+}
+
+async function callCompleteMetaOAuth(): Promise<{ connected: boolean }> {
+  try {
+    const response = await appFetch('/api/meta-complete-oauth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json();
+    return { connected: data.connected === true };
+  } catch {
+    return { connected: false };
+  }
+}
+
 async function exchangeGmcCode(code: string): Promise<void> {
   const response = await appFetch('/api/gmc-exchange-code', {
     method: 'POST',
@@ -167,6 +187,7 @@ const ConnectTab: FC<{
   onTabChange: (tab: string) => void;
 }> = ({ config, onRefresh, onTabChange }) => {
   const [connecting, setConnecting] = useState(false);
+  const [connectingMeta, setConnectingMeta] = useState(false);
   const [awaitingCode, setAwaitingCode] = useState(false);
   const [authCode, setAuthCode] = useState('');
   const [exchanging, setExchanging] = useState(false);
@@ -174,6 +195,12 @@ const ConnectTab: FC<{
   const [success, setSuccess] = useState(false);
 
   const [disconnecting, setDisconnecting] = useState(false);
+
+  useEffect(() => {
+    callCompleteMetaOAuth().then(({ connected }) => {
+      if (connected) onRefresh();
+    });
+  }, [onRefresh]);
 
   const handleDisconnectGmc = useCallback(async () => {
     setDisconnecting(true);
@@ -286,11 +313,33 @@ const ConnectTab: FC<{
       <Card>
         <Card.Header
           title="Meta Product Catalog"
-          subtitle="Coming soon — Phase 4"
+          subtitle={
+            config?.metaConnected
+              ? 'Connected'
+              : 'Connect to sync products to Meta Shopping'
+          }
           suffix={
-            <Button size="small" disabled>
-              Connect
-            </Button>
+            config?.metaConnected ? (
+              <Text size="small" skin="success" weight="bold">Connected</Text>
+            ) : (
+              <Button
+                size="small"
+                onClick={async () => {
+                  setConnectingMeta(true);
+                  setError(null);
+                  try {
+                    const authUrl = await callInitiateMetaOAuth();
+                    window.location.href = authUrl;
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to start Meta OAuth flow');
+                    setConnectingMeta(false);
+                  }
+                }}
+                disabled={connectingMeta || connecting || awaitingCode}
+              >
+                {connectingMeta ? 'Connecting...' : 'Connect'}
+              </Button>
+            )
           }
         />
       </Card>

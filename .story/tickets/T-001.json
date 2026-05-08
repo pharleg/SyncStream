@@ -6,7 +6,7 @@
   "id": "T-001",
   "order": 10,
   "phase": "meta-billing",
-  "status": "open",
+  "status": "inprogress",
   "title": "Complete Meta OAuth two-phase flow",
   "type": "task"
 }

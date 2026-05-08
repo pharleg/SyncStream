@@ -1,0 +1,21 @@
+import type { APIRoute } from 'astro';
+import { initiateMetaOAuth } from '../../backend/oauthService';
+import { requireAuth } from '../../lib/requireAuth';
+
+export const GET: APIRoute = async ({ request }) => {
+  try {
+    const session = await requireAuth(request);
+    if (session instanceof Response) return session;
+    const { instanceId } = session;
+    const authUrl = await initiateMetaOAuth(instanceId);
+    return new Response(JSON.stringify({ authUrl }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+};

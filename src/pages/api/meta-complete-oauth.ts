@@ -1,8 +1,8 @@
 import type { APIRoute } from 'astro';
 import { secrets } from '@wix/secrets';
 import { createClient } from '@supabase/supabase-js';
-import { handleGmcCallback, getValidGmcAccessToken, getGmcTokens, storeMerchantId } from '../../backend/oauthService';
-import { fetchMerchantId, registerGcpProject, createDataSource } from '../../backend/gmcClient';
+import { handleMetaCallback, storeMetaCatalogId, getValidMetaAccessToken } from '../../backend/oauthService';
+import { fetchMetaCatalogId } from '../../backend/metaClient';
 import { getAppConfig, saveAppConfig } from '../../backend/dataService';
 import { requireAuth } from '../../lib/requireAuth';
 
@@ -26,7 +26,7 @@ export const POST: APIRoute = async ({ request }) => {
       .from('pending_oauth')
       .select('code')
       .eq('instance_id', instanceId)
-      .eq('platform', 'gmc')
+      .eq('platform', 'meta')
       .single();
 
     if (error || !data) {
@@ -35,30 +35,30 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
-    await supabase.from('pending_oauth').delete().eq('instance_id', instanceId).eq('platform', 'gmc');
+    await supabase
+      .from('pending_oauth')
+      .delete()
+      .eq('instance_id', instanceId)
+      .eq('platform', 'meta');
 
-    await handleGmcCallback(instanceId, data.code);
+    await handleMetaCallback(instanceId, data.code);
 
-    const accessToken = await getValidGmcAccessToken(instanceId);
-    const merchantId = await fetchMerchantId(accessToken);
-    await storeMerchantId(instanceId, merchantId);
-    await registerGcpProject(merchantId, accessToken);
-    const dataSourceId = await createDataSource(merchantId, accessToken);
+    const accessToken = await getValidMetaAccessToken(instanceId);
+    const catalogId = await fetchMetaCatalogId(accessToken);
+    await storeMetaCatalogId(instanceId, catalogId);
 
     let config = await getAppConfig(instanceId);
     if (!config) {
       config = {
         instanceId,
-        gmcConnected: true,
-        metaConnected: false,
+        gmcConnected: false,
+        metaConnected: true,
         fieldMappings: {},
         syncEnabled: false,
         lastFullSync: null,
-        gmcDataSourceId: dataSourceId,
       };
     } else {
-      config.gmcConnected = true;
-      config.gmcDataSourceId = dataSourceId;
+      config.metaConnected = true;
     }
     await saveAppConfig(config);
 

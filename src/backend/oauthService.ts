@@ -215,17 +215,87 @@ export async function getValidGmcTokens(
   return { ...tokens, accessToken };
 }
 
-export async function initiateMetaOAuth(
-  _instanceId: string,
-): Promise<string> {
-  // TODO Phase 4: return OAuth URL
-  throw new Error('Not implemented');
+const META_AUTH_URL = 'https://www.facebook.com/v19.0/dialog/oauth';
+const META_TOKEN_URL = 'https://graph.facebook.com/v19.0/oauth/access_token';
+const META_SCOPE = 'catalog_management,business_management';
+
+async function getMetaClientCredentials(): Promise<{
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}> {
+  const [clientId, clientSecret, redirectUri] = await Promise.all([
+    getSecret('meta_client_id'),
+    getSecret('meta_client_secret'),
+    getSecret('meta_redirect_uri'),
+  ]);
+  return { clientId, clientSecret, redirectUri };
 }
 
-export async function handleMetaCallback(
-  _instanceId: string,
-  _code: string,
-): Promise<void> {
-  // TODO Phase 4: exchange code, store tokens
-  throw new Error('Not implemented');
+export async function initiateMetaOAuth(instanceId: string): Promise<string> {
+  const { clientId, redirectUri } = await getMetaClientCredentials();
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: META_SCOPE,
+    state: `${instanceId}|meta`,
+  });
+  return `${META_AUTH_URL}?${params.toString()}`;
+}
+
+export async function handleMetaCallback(instanceId: string, code: string): Promise<void> {
+  const { clientId, clientSecret, redirectUri } = await getMetaClientCredentials();
+
+  const tokenUrl = new URL(META_TOKEN_URL);
+  tokenUrl.searchParams.set('client_id', clientId);
+  tokenUrl.searchParams.set('client_secret', clientSecret);
+  tokenUrl.searchParams.set('redirect_uri', redirectUri);
+  tokenUrl.searchParams.set('code', code);
+
+  const response = await fetch(tokenUrl.toString());
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(`Meta token exchange failed: ${raw}`);
+  }
+  const data = (await response.json()) as { access_token: string; expires_in?: number };
+
+  // Exchange short-lived token for long-lived (60-day) token
+  const llUrl = new URL(META_TOKEN_URL);
+  llUrl.searchParams.set('grant_type', 'fb_exchange_token');
+  llUrl.searchParams.set('client_id', clientId);
+  llUrl.searchParams.set('client_secret', clientSecret);
+  llUrl.searchParams.set('fb_exchange_token', data.access_token);
+
+  const llResponse = await fetch(llUrl.toString());
+  if (!llResponse.ok) {
+    const raw = await llResponse.text();
+    throw new Error(`Meta long-lived token exchange failed: ${raw}`);
+  }
+  const llData = (await llResponse.json()) as { access_token: string; expires_in: number };
+
+  await upsertSecret(`meta_at_${instanceId}`, llData.access_token);
+  await upsertSecret(
+    `meta_exp_${instanceId}`,
+    String(Date.now() + (llData.expires_in ?? 5_184_000) * 1000),
+  );
+}
+
+export async function storeMetaCatalogId(instanceId: string, catalogId: string): Promise<void> {
+  await upsertSecret(`meta_catalog_id_${instanceId}`, catalogId);
+}
+
+export async function getMetaTokens(instanceId: string): Promise<import('../types/meta.types').MetaTokens> {
+  const [accessToken, expiresAtStr, catalogId] = await Promise.all([
+    getSecret(`meta_at_${instanceId}`),
+    getSecret(`meta_exp_${instanceId}`),
+    getSecret(`meta_catalog_id_${instanceId}`),
+  ]);
+  return { accessToken, expiresAt: Number(expiresAtStr), catalogId };
+}
+
+export async function getValidMetaAccessToken(instanceId: string): Promise<string> {
+  const tokens = await getMetaTokens(instanceId);
+  if (Date.now() < tokens.expiresAt - 60_000) return tokens.accessToken;
+  throw new Error('Meta access token expired — user must re-authenticate');
 }

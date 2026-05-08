@@ -53,21 +53,47 @@ async function callCompleteGmcOAuth(): Promise<{ connected: boolean; error?: str
   }
 }
 
+async function callInitiateMetaOAuth(): Promise<string> {
+  const response = await connectFetch('/api/meta-oauth-init');
+  if (!response.ok) {
+    const text = await response.text();
+    const msg = (() => { try { return (JSON.parse(text) as { error?: string }).error; } catch { return text; } })();
+    throw new Error(msg ?? `OAuth init failed (${response.status})`);
+  }
+  const data = await response.json();
+  return data.authUrl;
+}
+
+async function callCompleteMetaOAuth(): Promise<{ connected: boolean; error?: string }> {
+  try {
+    const response = await connectFetch('/api/meta-complete-oauth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await response.json();
+    if (!response.ok) return { connected: false, error: data.error ?? `HTTP ${response.status}` };
+    return { connected: data.connected === true };
+  } catch (e) {
+    return { connected: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
 const ConnectPage: FC = () => {
   const [gmcConnected, setGmcConnected] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [connecting, setConnecting] = useState(false);
+  const [connecting, setConnecting] = useState<'gmc' | 'meta' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [metaConnected, setMetaConnected] = useState(false);
 
   useEffect(() => {
-    Promise.all([callGetAppConfig(), callCompleteGmcOAuth()])
-      .then(([config, gmcResult]) => {
+    Promise.all([callGetAppConfig(), callCompleteGmcOAuth(), callCompleteMetaOAuth()])
+      .then(([config, gmcResult, metaResult]) => {
         if (config) {
           setGmcConnected(config.gmcConnected || gmcResult.connected);
-          setMetaConnected(config.metaConnected ?? false);
-        } else if (gmcResult.connected) {
-          setGmcConnected(true);
+          setMetaConnected(config.metaConnected || metaResult.connected);
+        } else {
+          if (gmcResult.connected) setGmcConnected(true);
+          if (metaResult.connected) setMetaConnected(true);
         }
         if (!gmcResult.connected && gmcResult.error) {
           setError('Google Merchant Center connection failed. Please try again.');
@@ -78,18 +104,26 @@ const ConnectPage: FC = () => {
   }, []);
 
   const handleConnectGmc = useCallback(async () => {
-    setConnecting(true);
+    setConnecting('gmc');
     setError(null);
     try {
       const authUrl = await callInitiateGmcOAuth();
       window.location.href = authUrl;
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Failed to start OAuth flow',
-      );
-      setConnecting(false);
+      setError(err instanceof Error ? err.message : 'Failed to start OAuth flow');
+      setConnecting(null);
+    }
+  }, []);
+
+  const handleConnectMeta = useCallback(async () => {
+    setConnecting('meta');
+    setError(null);
+    try {
+      const authUrl = await callInitiateMetaOAuth();
+      window.location.href = authUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start Meta OAuth flow');
+      setConnecting(null);
     }
   }, []);
 
@@ -139,9 +173,9 @@ const ConnectPage: FC = () => {
                     <Button
                       size="small"
                       onClick={handleConnectGmc}
-                      disabled={connecting}
+                      disabled={connecting !== null}
                     >
-                      {connecting ? 'Connecting...' : 'Connect'}
+                      {connecting === 'gmc' ? 'Connecting...' : 'Connect'}
                     </Button>
                   )
                 }
@@ -162,7 +196,13 @@ const ConnectPage: FC = () => {
                   metaConnected ? (
                     <Text size="small" skin="success" weight="bold">Connected</Text>
                   ) : META_OAUTH_ENABLED ? (
-                    <Button size="small" disabled>Connect</Button>
+                    <Button
+                      size="small"
+                      onClick={handleConnectMeta}
+                      disabled={connecting !== null}
+                    >
+                      {connecting === 'meta' ? 'Connecting...' : 'Connect'}
+                    </Button>
                   ) : (
                     <Badge size="tiny" skin="standard">COMING SOON</Badge>
                   )
